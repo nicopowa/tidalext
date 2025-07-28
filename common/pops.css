@@ -1,0 +1,412 @@
+:root {
+	--bg-primary: #0f0f0f;
+	--bg-secondary: #1a1a1a;
+	--bg-tertiary: #1d1d1d;
+	--text: #8f8f8f;
+	--border: #333;
+	--accent: #0066cc;
+	--accent-hover: #0052a3;
+	--success: #22c55e;
+	--error: #ef4444;
+	--info: #3b82f6;
+	--gaps: 4px;
+	--pads: 6px;
+}
+
+@media (prefers-color-scheme: light) {
+	:root {
+		--bg-primary: #ffffff;
+		--bg-secondary: #f5f5f5;
+		--bg-tertiary: #e5e5e5;
+		--text: #4a4a4a;
+		--border: #d1d5db;
+	}
+}
+
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+body {
+	width: 320px;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+		sans-serif;
+	background: var(--bg-primary);
+	color: var(--text);
+	/* font-size: 13px; */
+}
+
+/* util */
+
+.hidden {
+	display: none !important;
+}
+
+a {
+	color: inherit;
+}
+
+/* controls */
+
+.btn {
+	padding: 6px 8px;
+	border: none;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	font-size: 13px;
+}
+
+.btn-primary {
+	background: var(--accent);
+	color: white;
+}
+
+.btn-secondary {
+	/* background: var(--bg-tertiary); */
+	/* color: var(--text); */
+	background-color: var(--text);
+	padding: 3px 6px;
+	font-size: 11px;
+}
+
+
+/* main */
+
+.container {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 6px 7px;
+	color: var(--text);
+}
+
+.header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	font-size: 15px;
+	font-weight: 600;
+}
+
+.musicext a {
+	color: inherit;
+	text-decoration: none;
+}
+
+/* quality */
+
+.quality-group {
+	display: flex;
+	gap: 8px;
+}
+
+.quality-option {
+	cursor: pointer;
+	user-select: none;
+}
+
+.quality-option input {
+	display: none;
+}
+
+.quality-option span {
+	display: block;
+	/* padding: 3px 5px; */
+	text-align: center;
+	border-bottom: solid 1px transparent;
+	/* background: var(--bg-secondary); */
+	font-size: 12px;
+}
+
+.quality-option input:checked + span {
+	/* background: var(--accent); */
+	border-bottom: solid 1px var(--text);
+	/* color: white; */
+}
+
+/* media */
+
+.nomedia {
+	text-align: center;
+	padding: 16px;
+	font-size: 14px;
+}
+
+.media {
+	display: flex;
+	flex-direction: column;
+	gap: var(--gaps);
+}
+
+#mediainfo {
+	display: flex;
+	align-items: center;
+	gap: var(--gaps);
+	background: var(--bg-secondary);
+}
+
+#mediawrap {
+	max-height: 240px;
+	overflow-y: scroll;
+}
+
+#medialist {
+	display: flex;
+	flex-direction: column;
+	gap: var(--gaps);
+}
+
+.mediaitem {
+	display: flex;
+	align-items: center;
+	gap: var(--gaps);
+	padding: var(--gaps);
+	margin-right: 2px;
+	background: var(--bg-secondary);
+}
+
+.track-number {
+	min-width: 20px;
+	color: var(--text);
+	text-align: center;
+	font-size: 11px;
+}
+
+.album-cover,
+.artist-cover,
+.release-cover {
+	width: 4rem;
+	height: 4rem;
+}
+
+.album-cover img,
+.artist-cover img, 
+.release-cover img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.album-info,
+.artist-info, 
+.release-info, 
+.track-info {
+	flex: 1;
+	min-width: 0;
+}
+
+.album-info, 
+.artist-info,
+.release-info {
+	display: flex;
+	flex-direction: column;
+	gap: calc(var(--gaps) / 2);
+	padding: var(--gaps);
+}
+
+.album-title,
+.artist-name, 
+.release-title, 
+.track-title {
+	font-weight: 500;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.album-title {
+	font-size: 15px;
+}
+
+.release-title {
+	font-size: 15px;
+}
+
+.artist-name {
+	font-size: 17px;
+}
+
+.track-title {
+	font-size: 12px;
+}
+
+.album-artist,
+.track-artist {
+	color: var(--text);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.album-artist {
+	font-size: 13px;
+}
+
+.track-artist {
+	font-size: 11px;
+}
+
+.album-year, 
+.release-year {
+	color: var(--text);
+	font-size: 11px;
+}
+
+.album-download-btn,
+.track-download-btn,
+.release-download-btn {
+	width: 24px;
+	height: 24px;
+	padding: var(--gaps);
+	-webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='M12 15V3'/%3E%3Cpath d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E");
+	mask-size: 16px;
+	mask-repeat: no-repeat;
+	mask-position: center;
+}
+
+.album-download-btn {
+	margin-right: var(--gaps);
+}
+
+.release-download-btn {
+	background-color: #9c2b2b;
+}
+
+.status {
+	padding: var(--gaps);
+	text-align: center;
+	font-size: 11px;
+	display: none;
+}
+
+.status.success {
+	background: rgba(34, 197, 94, 0.1);
+	color: var(--success);
+}
+
+.status.error {
+	background: rgba(239, 68, 68, 0.1);
+	color: var(--error);
+}
+
+.status.info {
+	background: rgba(59, 130, 246, 0.1);
+	color: var(--info);
+}
+
+/* queue */
+
+.queue-section {
+	max-height: 240px;
+	overflow-y: scroll;
+}
+
+.queue-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--gaps);
+}
+
+.queue-item {
+	position: relative;
+	background: var(--bg-secondary);
+	margin-right: 2px;
+}
+
+.queue-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: var(--pads);
+	gap: var(--pads);
+}
+
+.queue-info {
+	flex: 1;
+	min-width: 0;
+}
+
+.queue-title {
+	font-weight: 500;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 12px;
+}
+
+.queue-status {
+	min-width: 36px;
+	text-align: center;
+	padding: 2px 4px;
+	font-size: 10px;
+	text-transform: uppercase;
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.queue-status.wait {
+	background: rgba(107, 114, 128, 0.2);
+	color: #9ca3af;
+}
+
+.queue-status.loading {
+	background: rgba(59, 130, 246, 0.2);
+	color: var(--info);
+}
+
+.queue-status.done {
+	background: rgba(34, 197, 94, 0.2);
+	color: var(--success);
+}
+
+.queue-status.fail {
+	background: rgba(239, 68, 68, 0.2);
+	color: var(--error);
+}
+
+.queue-progress {
+	position: absolute;
+	bottom: 0;
+	width: 100%;
+	height: 2px;
+}
+
+.progress-fill {
+	height: 100%;
+	background: var(--accent);
+}
+
+/* scroll */
+::-webkit-scrollbar {
+
+	width: 2px;
+	height: 2px;
+	background-color: var(--bg-secondary);
+
+}
+
+::-webkit-scrollbar-thumb {
+
+	width: 2px;
+	background-color: var(--text);
+
+}
+
+::-webkit-scrollbar-button {
+
+	display: none;
+	width: 0;
+	height: 0;
+
+}
+
+::-webkit-scrollbar-corner {
+
+	background-color: transparent;
+
+}

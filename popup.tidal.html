@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<link rel="stylesheet" href="common/pops.css" />
+		<script src="common/pops.js"></script>
+		<script src="popup.tidal.js"></script>
+	</head>
+	<body>
+		<div class="container">
+			<div class="header">
+				<div class="musicext"><a href="https://github.com/nicopowa/tidalext" target="_blank">TidalExt</a></div>
+				<div class="quality-group">
+					<label class="quality-option">
+						<input type="radio" name="quality" value="LOSSLESS" checked />
+						<span>16/44.1</span>
+					</label>
+					<label class="quality-option">
+						<input type="radio" name="quality" value="HIRES" />
+						<span>24/≤96</span>
+					</label>
+					<label class="quality-option">
+						<input type="radio" name="quality" value="HIRES_LOSSLESS" />
+						<span>24/>96</span>
+					</label>
+				</div>
+			</div>
+
+			<div id="nomedia" class="nomedia hidden">
+				waiting for
+				<a href="https://listen.tidal.com" target="_blank">Tidal</a>
+				content
+			</div>
+
+			<div id="media" class="media hidden">
+				<div id="mediainfo"></div>
+				<div id="mediawrap" class="hidden">
+					<div id="medialist"></div>
+				</div>
+			</div>
+
+			<div id="queue" class="queue-section hidden">
+				<div id="queueList" class="queue-list"></div>
+			</div>
+
+			<div id="mainStatus" class="status"></div>
+		</div>
+	</body>
+</html>
