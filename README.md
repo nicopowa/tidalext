@@ -53,7 +53,7 @@ Looking for [QobuzExt](https://github.com/nicopowa/qobuzext) ?
 - [storage](https://developer.chrome.com/docs/extensions/reference/api/storage) : save settings
 - [downloads](https://developer.chrome.com/docs/extensions/reference/api/downloads) : download files
 - [webRequest](https://developer.chrome.com/docs/extensions/reference/api/webRequest) : watch network
-- [offscreen](https://developer.chrome.com/docs/extensions/reference/api/offscreen): process audio
+- [offscreen](https://developer.chrome.com/docs/extensions/reference/api/offscreen) : process audio
 
 ## Disclaimer
 

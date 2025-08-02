@@ -340,14 +340,18 @@ class Backstage {
 			}
 			else {
 
-				this.handleError("invalid media type");
+				this.handleError({
+					error: "invalid media type"
+				});
 			
 			}
 
 		}
 		catch(err) {
 
-			this.handleError(err.message);
+			this.handleError({
+				error: err
+			});
 		
 		}
 	
@@ -355,7 +359,7 @@ class Backstage {
 
 	async handleError(msg) {
 
-		console.error(msg.error);
+		console.error(msg?.error || msg || "error");
 
 		try {
 

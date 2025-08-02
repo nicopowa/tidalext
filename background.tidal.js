@@ -65,13 +65,8 @@ class TidalBackground extends Backstage {
 			}
 		);
 
-		if(!res.ok) {
-
-			this.handleError(`http ${res.status}: ${res.statusText}`);
-
-			return null;
-		
-		}
+		if(!res.ok)
+			throw new Error(`http ${res.status}: ${res.statusText}`);
 		
 		const dat = await res.json();
 
