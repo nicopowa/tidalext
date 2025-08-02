@@ -1,40 +1,12 @@
-const browser = chrome;
-
-import {Backstage, BaseQueueManager} from "./common/back.js";
-
-class TidalQueueManager extends BaseQueueManager {
-
-	async downloadTask(task) {
-
-		// console.log("task", task);
-
-		const trackData = await this.main.trackUrl(
-			task.track.id,
-			task.quality
-		);
-		
-		console.log(trackData);
-
-		if(!trackData.urls.length) {
-
-			throw new Error("no download urls");
-		
-		}
-
-		await this.startDownload(
-			trackData.urls,
-			task
-		);
-	
-	}
-
-}
+import {Backstage} from "./common/back.js";
 
 class TidalBackground extends Backstage {
 
 	constructor() {
 
-		super();
+		super("offscreen.tidal.html");
+
+		this.urlBase = "https://listen.tidal.com/";
 
 		this.dat = {
 			auth: false,
@@ -42,53 +14,31 @@ class TidalBackground extends Backstage {
 			accessToken: ""
 		};
 
-		this.queue = new TidalQueueManager(this);
+		this.heads("https://login.tidal.com/oauth2/*");
 
-		this.heading = this.heads.bind(this);
-
-		this.init();
-	
-	}
-	
-	async init() {
-
-		browser.webRequest.onBeforeSendHeaders.addListener(
-			this.heading,
-			{
-				urls: ["https://login.tidal.com/oauth2/*"]
-			},
-			[
-				"requestHeaders"
-			]
-		);
-
-		const dataUrls = {
+		this.watch({
 			"/pages/album": this.handleAlbum,
 			"/v2/artist/": this.handleArtist
-		};
-
-		Object.entries(dataUrls)
-		.forEach(([url, cbk]) =>
-			this.track(
-				url,
-				cbk.bind(this)
-			));
-
-		await this.queue.init("offscreen.tidal.html");
+		});
 	
 	}
 
-	heads(evt) {
+	heading(evt) {
 
 		const authHeader = evt.requestHeaders.find(reqHeader =>
 			reqHeader.name === "authorization");
 
 		if(authHeader) {
 
-			console.log("auth header");
+			console.log("auth data");
 
-			this.dat.accessToken = authHeader.value;
-			this.dat.auth = true;
+			if(authHeader.value !== this.dat.accessToken) {
+
+				this.dat.accessToken = authHeader.value;
+				this.dat.auth = true;
+				this.ready();
+			
+			}
 
 		}
 
@@ -100,12 +50,10 @@ class TidalBackground extends Backstage {
 
 	async request(endpoint, params = {}) {
 
-		// console.log("req", endpoint, params);
-
 		const query = Object.keys(params).length ? "?" + new URLSearchParams(params) : "";
 		
 		const res = await fetch(
-			`https://listen.tidal.com/v1/${endpoint}${query}`,
+			`${this.urlBase}v1/${endpoint}${query}`,
 			{
 				headers: {
 					"Content-Type": "application/json",
@@ -117,13 +65,15 @@ class TidalBackground extends Backstage {
 			}
 		);
 
-		if(!res.ok)
-			throw new Error(`http ${res.status}: ${res.statusText}`);
+		if(!res.ok) {
+
+			this.handleError(`http ${res.status}: ${res.statusText}`);
+
+			return null;
+		
+		}
 		
 		const dat = await res.json();
-
-		if(dat.status && dat.status !== "success")
-			throw new Error(dat.message || "api request failed");
 
 		return dat;
 	
@@ -156,6 +106,8 @@ class TidalBackground extends Backstage {
 
 		this.mediaHint();
 
+		this.syncMedia();
+
 	}
 
 	handleReleases(dat) {
@@ -169,6 +121,8 @@ class TidalBackground extends Backstage {
 			"releases",
 			this.media
 		);
+
+		this.syncMedia();
 	
 	}
 
@@ -184,10 +138,19 @@ class TidalBackground extends Backstage {
 			this.media
 		);
 
+		this.syncMedia();
+
 	}
 
-	async trackUrl(trackId, quality) {
+	trackList() {
 
+		return this.media?.tracks || [];
+	
+	}
+
+	async getTrackUrl(trackId, quality) {
+
+		// wtf
 		if(quality === "HIRES_LOSSLESS")
 			quality = "HI_RES_LOSSLESS";
 
@@ -209,51 +172,24 @@ class TidalBackground extends Backstage {
 
 		const manifestText = atob(trackManifest.manifest);
 
+		// console.log(manifestText);
+
 		try {
 
 			// JSON manifest = FLAC
-			const json = JSON.parse(manifestText);
+			const manifestJson = JSON.parse(manifestText);
 
 			return {
-				urls: json.urls || [],
+				url: manifestJson.urls || [],
+				man: manifestJson,
 				format: "flac"
 			};
 		
 		}
 		catch(err) {
 
-			// XML manifest = DASH = M4A
-			const urls = [];
-			const init = manifestText.match(/initialization="([^"]+)"/)?.[1];
-			const media = manifestText.match(/media="([^"]+)"/)?.[1];
-			const timeline = manifestText.match(/<SegmentTimeline>(.*?)<\/SegmentTimeline>/s)?.[1];
-			
-			if(init)
-				urls.push(init);
-
-			if(media && timeline) {
-
-				let segNum = 1;
-
-				for(const match of timeline.matchAll(/<S d="\d+"(?: r="(\d+)")?/g)) {
-
-					const repeat = parseInt(match[1] || 0);
-
-					for(let i = 0; i <= repeat; i++) {
-
-						urls.push(media.replace(
-							"$Number$",
-							segNum++
-						));
-					
-					}
-				
-				}
-			
-			}
-
 			return {
-				urls: urls,
+				man: manifestText,
 				format: "m4a"
 			};
 		
@@ -261,7 +197,26 @@ class TidalBackground extends Backstage {
 	
 	}
 
-	filename(track, album) {
+	getCoverUrl(media) {
+
+		return `https://resources.tidal.com/images/${(media?.album?.cover || media.cover).replaceAll(
+			"-",
+			"/"
+		)}/640x640.jpg`;
+
+	}
+
+	getFilePath(track, album) {
+
+		const variousArtists = album?.artists.length === 1 
+		&& album.artists[0].name.toLowerCase() === "various artists";
+
+		const artistName = this.sanitize(variousArtists ? "Various Artists" : album?.artists[0]?.name);
+
+		const albumTitle = this.sanitize(this.albumTitle(album));
+
+		const albumYear = new Date(album.releaseDate || 0)
+		.getFullYear();
 
 		const trackNum = String(track.trackNumber || 1)
 		.padStart(
@@ -269,94 +224,20 @@ class TidalBackground extends Backstage {
 			"0"
 		);
 
-		const ext = ".flac";
-		const title = this.sanitize(this.trackName(track));
-		const artist = this.sanitize(track.artists[0]?.name || album?.artists[0]?.name || "Unknown");
-		const albumTitle = this.sanitize(album?.title || "Unknown");
-		const year = new Date(album.releaseDate || 0)
-		.getFullYear();
-
-		return `Tidal/${artist}/${albumTitle} (${year})/${trackNum}. ${title}${ext}`;
-	
-	}
-	
-	async handleDownload(msg) {
-
-		try {
-
-			// console.log("download", msg);
-
-			const {
-				mediaType, mediaId, quality
-			} = msg;
-
-			const coverBlob = await this.getCover(`https://resources.tidal.com/images/${this.media.cover.replaceAll(
-				"-",
-				"/"
-			)}/640x640.jpg`);
-
-			if(mediaType === "track") {
-
-				const track = this.media?.tracks.find(track =>
-					track.id === mediaId);
-
-				if(track) {
-
-					this.trackDownload(
-						track,
-						this.media,
-						quality,
-						coverBlob
-					);
-
-				}
-			
-			}
-			else if(mediaType === "album") {
-
-				for(const track of this.media.tracks || []) {
-
-					this.trackDownload(
-						track,
-						this.media,
-						quality,
-						coverBlob
-					);
-				
-				}
-			
-			}
-			else {
-
-				return {
-					ok: false,
-					error: "invalid media type"
-				};
-			
-			}
-
-			return {
-				ok: true
-			};
+		const fileName = this.sanitize(`${trackNum}. ${variousArtists ? track.artists[0]?.name + " -" : ""} ${this.trackTitle(track)}`);
 		
-		}
-		catch(err) {
+		const fileExt = ".m4a";
 
-			return {
-				ok: false,
-				error: err.message
-			};
-		
-		}
-	
+		return `Tidal/${artistName}/${albumTitle} (${albumYear})/${fileName}${fileExt}`;
+
 	}
 
-	trackMeta(track, album) {
+	getMetaData(track, album) {
 
 		return {
-			"TITLE": track.title || "Unknown",
+			"TITLE": this.trackTitle(track),
 			"ARTIST": track.artists[0]?.name || album?.artists[0]?.name || "Unknown",
-			"ALBUM": album?.title || "Unknown",
+			"ALBUM": this.albumTitle(album),
 			"TRACKNUMBER": String(track.trackNumber || 1),
 			"ALBUMARTIST": album?.artists[0]?.name || "Unknown",
 			"DATE": new Date(album?.releaseDate || 0)

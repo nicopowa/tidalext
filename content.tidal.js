@@ -6,16 +6,8 @@
 		"message",
 		evt => {
 
-			if(evt.source !== window)
-				return;
-	
-			if(evt.data.type === "fetch") {
-
-				// console.log("fetched", evt.data.url);
-
+			if(evt.source === window && evt.data.type === "fetch")
 				browser.runtime.sendMessage(evt.data);
-			
-			}
 
 		}
 	);
@@ -23,7 +15,7 @@
 	const script = document.createElement("script");
 
 	script.src = browser.runtime.getURL("inject.tidal.js");
-	script.type = "text/javascript";
+	// script.type = "text/javascript";
 	
 	script.onload = () =>
 		script.remove();
@@ -38,4 +30,3 @@
 	(document.head || document.documentElement).appendChild(script);
 
 })();
-

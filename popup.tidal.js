@@ -1,21 +1,27 @@
 class TidalPopup extends BasePopup {
 
+	constructor() {
+
+		super();
+
+		this.showCovers = false;
+	
+	}
+
 	updateQualityOptions() {
 
-		if(this.currentMedia.extype !== "album") {
+		if(this.media.extype !== "album") {
 
 			return;
 		
 		}
 
-		const currentQuality = this.currentMedia.mediaMetadata.tags;
+		const currentQuality = this.media.mediaMetadata.tags;
 
 		document.querySelectorAll("input[name='quality']")
 		.forEach(qualityRadio => {
 
 			const hasQuality = currentQuality.includes(qualityRadio.value);
-
-			qualityRadio.parentElement.style.opacity = hasQuality ? 1 : 0.3;
 
 			qualityRadio.disabled = !hasQuality;
 
@@ -26,67 +32,60 @@ class TidalPopup extends BasePopup {
 	renderAlbum() {
 
 		this.elements.mediainfo.innerHTML = `
-				<div class="album-cover">
-					<img src="https://resources.tidal.com/images/${this.currentMedia.cover.replaceAll(
+				${this.showCovers ? `<div class="album-cover">
+					<img src="https://resources.tidal.com/images/${this.media.cover.replaceAll(
 		"-",
 		"/"
 	)}/640x640.jpg"/>
-				</div>
+				</div>` : ""}
 				<div class="album-info">
-					<div class="album-title">${this.currentMedia.title}</div>
-					<div class="album-artist">${this.currentMedia.artists[0].name}</div>
-					<div class="album-year">${new Date(this.currentMedia.releaseDate)
+					<div class="album-title">${this.media.title}</div>
+					<div class="album-artist">${this.media.artists[0].name}</div>
+					<div class="album-year">${new Date(this.media.releaseDate)
 	.getFullYear()}</div>
 				</div>
-				<button class="btn btn-secondary album-download-btn" data-album-id="${this.currentMedia.id}"></button>
+				<button class="album-download download-btn" data-type="album" data-id="${this.media.id}"></button>
 			`;
 
-		this.elements.mediainfo.querySelector(".album-download-btn")
-		.addEventListener(
-			"click",
-			() =>
-				this.downloadAlbum()
-		);
-
-		const showList = this.currentMedia?.numberOfTracks > 0;
+		const showList = this.media?.numberOfTracks > 0;
 		
 		this.elements.mediawrap.classList.toggle(
-			"hidden",
+			"hide",
 			!showList
 		);
 		
 		if(showList) {
 
-			this.elements.medialist.innerHTML = this.currentMedia.tracks
+			this.elements.medialist.innerHTML = this.media.tracks
 			.map(track =>
 				this.createTrackItemHTML(track))
 			.join("");
-			
-			this.elements.medialist.querySelectorAll(".track-download-btn")
-			.forEach(btn =>
-				btn.addEventListener(
-					"click",
-					evt =>
-						this.downloadTrack(evt.target.dataset.trackId)
-				));
 		
 		}
+
+		this.elements.media.querySelectorAll(".download-btn")
+		.forEach(btn =>
+			btn.addEventListener(
+				"click",
+				evt =>
+					this.downloadMedia(evt.target)
+			));
 
 	}
 
 	renderArtist() {
 
-		const cover = this.currentMedia.item.data.picture.replaceAll(
+		const cover = this.media.item.data.picture.replaceAll(
 			"-",
 			"/"
 		);
 		
 		this.elements.mediainfo.innerHTML = `
-				<div class="artist-cover">
+				${this.showCovers ? `<div class="artist-cover">
 					<img src="https://resources.tidal.com/images/${cover}/750x750.jpg"/>
-				</div>
+				</div>` : ""}
 				<div class="artist-info">
-					<div class="artist-name">${this.currentMedia.item.data.name}</div>
+					<div class="artist-name">${this.media.item.data.name}</div>
 				</div>
 			`;
 
@@ -94,7 +93,7 @@ class TidalPopup extends BasePopup {
 			"hidden"
 		);
 
-		/*const releases = this.currentMedia.releases.flatMap(releaseType =>
+		/*const releases = this.media.releases.flatMap(releaseType =>
 			releaseType.items);
 
 		// console.log(releases);
@@ -119,7 +118,7 @@ class TidalPopup extends BasePopup {
 					<div class="track-title">${track.title}${track.version ? ` (${track.version})` : ""}</div>
 					<div class="track-artist">${track.artists[0].name}</div>
 				</div>
-				<button class="btn btn-secondary track-download-btn" data-track-id="${track.id}"></button>
+				<button class="track-download download-btn" data-type="track" data-id="${track.id}"></button>
 			</div>
 		`;
 	
@@ -129,15 +128,15 @@ class TidalPopup extends BasePopup {
 
 		return `
 			<div class="mediaitem">
-				<div class="release-cover">
+				${this.showCovers ? `<div class="release-cover">
 					<img src="${release.image.small}"/>
-				</div>
+				</div>` : ""}
 				<div class="release-info">
 					<div class="release-title">${release.title}</div>
 					<div class="release-year">${new Date(release.dates.original)
 	.getFullYear()}</div>
 				</div>
-				<button class="btn btn-secondary release-download-btn" data-release-id="${release.id}" disabled></button>
+				<button class="release-download download-btn" data-type="release" data-id="${release.id}" disabled></button>
 			</div>
 		`;
 	

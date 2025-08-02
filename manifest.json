@@ -10,10 +10,8 @@
 		"default_title": "TidalExt"
 	},
 	"permissions": [
-		"tabs",
 		"storage",
 		"downloads",
-		"activeTab",
 		"webRequest",
 		"offscreen"
 	],
@@ -37,5 +35,13 @@
 			"matches": ["https://listen.tidal.com/*"],
 			"resources": ["inject.tidal.js"]
 		}
-	]
+	],
+	"commands": {
+		"reload": {
+			"suggested_key": {
+				"default": "Alt+T"
+			},
+			"description": "reload"
+		}
+	}
 }

@@ -7,43 +7,46 @@
 		<script src="popup.tidal.js"></script>
 	</head>
 	<body>
-		<div class="container">
-			<div class="header">
-				<div class="musicext"><a href="https://github.com/nicopowa/tidalext" target="_blank">TidalExt</a></div>
-				<div class="quality-group">
-					<label class="quality-option">
+		<div id="container">
+			<div id="header">
+				<div id="musicext"><a href="https://github.com/nicopowa/tidalext" target="_blank">TidalExt</a></div>
+				<div id="quality">
+					<label>
 						<input type="radio" name="quality" value="LOSSLESS" checked />
-						<span>16/44.1</span>
+						<span>16/44</span>
 					</label>
-					<label class="quality-option">
+					<label>
 						<input type="radio" name="quality" value="HIRES" />
 						<span>24/≤96</span>
 					</label>
-					<label class="quality-option">
+					<label>
 						<input type="radio" name="quality" value="HIRES_LOSSLESS" />
-						<span>24/>96</span>
+						<span>24/96+</span>
 					</label>
 				</div>
 			</div>
 
-			<div id="nomedia" class="nomedia hidden">
-				waiting for
-				<a href="https://listen.tidal.com" target="_blank">Tidal</a>
-				content
+			<div id="status"></div>
+
+			<div id="nolink" class="hide"></div>
+
+			<div id="nomedia" class="hide">
+				<div>〜ヽ(⌐￭_￭)ノ♪♬</div>
 			</div>
 
-			<div id="media" class="media hidden">
+			<div id="media" class="hide">
 				<div id="mediainfo"></div>
-				<div id="mediawrap" class="hidden">
+				<div id="mediawrap" class="hide">
 					<div id="medialist"></div>
 				</div>
 			</div>
 
-			<div id="queue" class="queue-section hidden">
-				<div id="queueList" class="queue-list"></div>
+			<div id="queue" class="hide">
+				<div id="queuewrap">
+					<div id="queuelist"></div>
+				</div>
 			</div>
 
-			<div id="mainStatus" class="status"></div>
 		</div>
 	</body>
 </html>

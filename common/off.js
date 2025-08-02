@@ -4,49 +4,46 @@ class BaseOffscreenProcessor {
 
 	constructor() {
 
-		this.setupMessageHandlers();
-	
-	}
-	
-	setupMessageHandlers() {
-
-		browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-
-			if(message.action === "processStream") {
-
-				this.handleProcessing(message);
-			
-			}
+		this.blobs = new Map();
 		
-		});
+		browser.runtime.onMessage.addListener(this.handleMessage.bind(this));
 	
 	}
+
+	handleMessage(msg) {
+
+		switch(msg.type) {
+
+			case "processStream":
+				this.handleProcessing(msg);
+				break;
+
+			case "clearStream":
+				this.clearStream(msg);
+				break;
+
+		}
+
+	}
 	
-	handleProcessing(message) {
+	handleProcessing(msg) {
 
 		this.process(
-			message.fetchUrl,
-			message.metadata,
-			message.id,
-			message.cover
+			msg.dat,
+			msg.metadata,
+			msg.id,
+			msg.cover
 		)
 		.then(url => {
+
+			this.blobs.set(msg.id, url);
 
 			browser.runtime.sendMessage({
 				type: "streamComplete",
 				ok: true,
-				id: message.id,
+				id: msg.id,
 				url: url
 			});
-
-			setTimeout(
-				() => {
-
-					URL.revokeObjectURL(url);
-				
-				},
-				3456
-			);
 		
 		})
 		.catch(err => {
@@ -59,11 +56,27 @@ class BaseOffscreenProcessor {
 			browser.runtime.sendMessage({
 				type: "streamComplete",
 				ok: false,
-				id: message.id,
+				id: msg.id,
 				error: err.message
 			});
 		
 		});
+
+	}
+
+	clearStream(msg) {
+
+		const taskId = msg.id;
+
+		if(this.blobs.has(taskId)) {
+
+			console.log("clear", taskId);
+
+			URL.revokeObjectURL(this.blobs.get(taskId));
+
+			this.blobs.delete(taskId);
+
+		}
 
 	}
 

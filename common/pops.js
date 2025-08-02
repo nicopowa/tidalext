@@ -4,48 +4,34 @@ class BasePopup {
 
 	constructor() {
 
-		this.currentMedia = null;
-
-		this.state = {
-			loading: null,
-			mediaInfo: null,
-			queueItems: [],
-			currentTask: null,
-			currentProgress: 0
-		};
+		this.auth = false;
+		this.media = null;
+		this.queue = [];
+		this.current = [];
 
 		this.elements = {};
-		this.statusTimeouts = new Map();
 		
-		this.cacheElements();
-		this.bindEvents();
-		this.initialize();
-	
-	}
-
-	cacheElements() {
-
 		[
-			"content", "nomedia", "media", "mediainfo", "mediawrap", "medialist",
-			"queue", "queueList", "mainStatus"
+			"content", "nolink", "nomedia", "quality", "media", "mediainfo", "mediawrap", "medialist",
+			"queue", "queuelist", "status"
 		].forEach(id => {
 
 			this.elements[id] = document.getElementById(id);
 		
 		});
-	
-	}
 
-	bindEvents() {
-		
-		document.querySelector(".quality-group")
+		this.elements.quality
 		.addEventListener(
 			"change",
 			() =>
-				this.setSettings()
+				this.save()
 		);
 
 		browser.runtime.onMessage.addListener(this.handleMessage.bind(this));
+
+		this.send("popup");
+
+		// this.showStatus("this is a test");
 	
 	}
 
@@ -53,55 +39,54 @@ class BasePopup {
 
 		switch(msg.type) {
 
+			case "media":
+				this.updateMedia(msg);
+				break;
+
+			case "sync":
+				this.updateState(msg);
+				break;
+
 			case "progress":
-				this.updateProgress(msg.progress);
+				this.updateProgress(msg);
 				break;
 			
 			case "queue":
 				this.updateQueue(msg);
 				break;
 
+			case "error":
+				this.showError(msg);
+				break;
+
 		}
 
 	}
 
-	initialize() {
+	updateMedia(msg) {
 
-		this.sendMessage({
-			type: "media"
-		})
-		.then(media => {
-
-			this.currentMedia = media;
-			this.updateMedia();
-		
-		})
-		.catch(err => {
-
-			console.error(err);
-		
-		});
-
-		this.getSettings();
-	
-	}
-
-	updateMedia() {
+		this.media = msg.media;
 
 		this.elements.media.classList.toggle(
-			"hidden",
-			!this.currentMedia
-		);
-		this.elements.nomedia.classList.toggle(
-			"hidden",
-			!!this.currentMedia
+			"hide",
+			!this.media || !this.auth
 		);
 
-		if(this.currentMedia) {
+		this.elements.quality.classList.toggle(
+			"hide",
+			!this.media || !this.auth
+		);
+
+		this.elements.nomedia.classList.toggle(
+			"hide",
+			!!this.media || !this.auth
+		);
+
+		if(this.auth && this.media) {
 
 			this.updateQualityOptions();
 
-			switch(this.currentMedia.extype) {
+			switch(this.media.extype) {
 
 				case "album":
 					this.renderAlbum();
@@ -112,8 +97,16 @@ class BasePopup {
 				case "releases":
 					this.renderReleases();
 					break;
+				// case "label":
+				case "playlist":
+					this.renderPlaylist();
+					break;
+				// search results
 			
 			}
+
+		}
+		else {
 
 		}
 	
@@ -135,22 +128,26 @@ class BasePopup {
 
 	}
 
-	updateProgress(progress) {
+	renderPlaylist() {
 
-		this.state.currentProgress = progress;
+	}
 
-		const currentProgressEl = document.querySelector(".queue-item .queue-status.loading");
+	updateProgress(msg) {
+
+		const prg = msg.progress;
+
+		const currentProgressEl = document.querySelector(".queue-item .queued.load");
 		const currentProgressBar = document.querySelector(".queue-item .progress-fill");
 
-		if(currentProgressEl && progress > 0) {
+		if(currentProgressEl && prg > 0) {
 
-			currentProgressEl.textContent = `${progress}%`;
+			currentProgressEl.textContent = `${prg}%`;
 		
 		}
 
 		if(currentProgressBar) {
 
-			currentProgressBar.style.width = `${progress}%`;
+			currentProgressBar.style.width = `${prg}%`;
 		
 		}
 	
@@ -158,15 +155,14 @@ class BasePopup {
 
 	updateQueue(data) {
 
-		this.state.queueItems = data.items;
-		this.state.currentTask = data.current;
+		this.queue = data.items;
+		this.current = data.current;
 		
 		this.updateQueueDisplay();
 		
 		if(data.current?.status === "error") {
 
 			this.showStatus(
-				"mainStatus",
 				`download failed: ${data.current.error}`,
 				"error"
 			);
@@ -177,19 +173,16 @@ class BasePopup {
 
 	updateQueueDisplay() {
 
-		const {
-			queueItems, currentTask
-		} = this.state;
-		const allItems = currentTask ? [currentTask, ...queueItems] : queueItems;
+		const allItems = this.current ? [this.current, ...this.queue] : this.queue;
 		
 		this.elements.queue.classList.toggle(
-			"hidden",
+			"hide",
 			!allItems.length
 		);
 		
 		if(allItems.length) {
 
-			this.elements.queueList.innerHTML = allItems
+			this.elements.queuelist.innerHTML = allItems
 			.map(item =>
 				this.createQueueItemHTML(item))
 			.join("");
@@ -200,16 +193,14 @@ class BasePopup {
 
 	createQueueItemHTML(item) {
 
-		const isDownloading = item.status === "loading";
+		const isDownloading = item.status === "load";
 
 		return `
 			<div class="queue-item">
-				<div class="queue-header">
-					<div class="queue-info">
-						<div class="queue-title">${item.title}</div>
-					</div>
-					<div class="queue-status ${item.status}">${isDownloading ? `${item.progress}%` : item.status}</div>
+				<div class="queue-info">
+					<div class="queue-title">${item.title}</div>
 				</div>
+				<div class="queued ${item.status}">${isDownloading ? `${item.progress}%` : item.status}</div>
 				<div class="queue-progress">
 					<div class="progress-fill" style="width: ${item.progress}%"></div>
 				</div>
@@ -218,214 +209,139 @@ class BasePopup {
 	
 	}
 
-	setSettings() {
+	save() {
 
-		this.sendMessage({
-			type: "setSettings",
-			settings: {
-				quality: this.getQuality()
+		this.send(
+			"save",
+			{
+				settings: {
+					quality: this.getQuality()
+				}
 			}
-		})
-		.catch(err =>
-			console.error(
-				"set settings error",
-				err
-			));
+		);
 	
 	}
 
-	getSettings() {
+	updateState(msg) {
 
-		return this.sendMessage({
-			type: "getSettings"
-		})
-		.then(response => {
+		this.auth = msg.auth || false;
 
-			const quality = response?.["settings"]?.quality;
+		this.setQuality(msg.settings.quality);
 
-			if(quality)
-				this.setQuality(quality);
-		
-		})
-		.catch(err =>
-			console.error(
-				"get settings error",
-				err
-			));
-	
-	}
-	
-	downloadAlbum() {
+		this.elements.nolink.classList.toggle(
+			"hide",
+			!!this.auth
+		);
 
-		this.sendMessage({
-			type: "download",
-			mediaType: "album",
-			mediaId: this.currentMedia.id,
-			quality: this.getQuality()
-		})
-		.then(res => {
+		if(!this.auth) {
 
-			if(!res.ok) {
+			const msgs = {
+				"open": "open player",
+				"swap": "jump to tab",
+				"load": "refresh page"
+			};
 
-				this.showStatus(
-					"mainStatus",
-					res.error,
-					"error"
-				);
-			
-			}
-		
-		})
-		.catch(err => {
+			this.elements.nolink.innerHTML = `<div id="unlinked">extension not linked</div>
+				<div id="linker">${msgs[msg.need]}</div>`;
 
-			this.showStatus(
-				"mainStatus",
-				err,
-				"error"
-			);
-		
-		})
-		.finally(() => {
-
-			this.state.loading = null;
-		
-		});
-
-	}
-
-	downloadTrack(trackId) {
-
-		this.sendMessage({
-			type: "download",
-			mediaType: "track",
-			mediaId: +trackId,
-			quality: this.getQuality()
-		})
-		.then(res => {
-
-			if(!res.ok) {
-
-				this.showStatus(
-					"mainStatus",
-					"download failed :" + res.error,
-					"error"
-				);
-			
-			}
-		
-		})
-		.catch(err => {
-
-			this.showStatus(
-				"mainStatus",
-				"download failed :" + err,
-				"error"
-			);
-		
-		});
-	
-	}
-
-	sendMessage(message) {
-
-		return new Promise((resolve, reject) => {
-
-			browser.runtime.sendMessage(
-				message,
-				response => {
-
-					if(browser.runtime.lastError) {
-
-						reject(new Error(browser.runtime.lastError.message));
-				
-					}
-					else {
-
-						resolve(response);
-				
-					}
-			
+			document.querySelector("#linker")
+			.addEventListener(
+				"click",
+				() =>
+					this.send(
+						"link",
+						{
+							how: msg.need
+						}
+					),
+				{
+					once: true
 				}
 			);
-		
+
+		}
+	
+	}
+
+	downloadMedia(media) {
+
+		this.send(
+			"download",
+			{
+				mediaType: media.dataset.type,
+				mediaId: media.dataset.id,
+				quality: this.getQuality()
+			}
+		);
+
+	}
+
+	send(type, data) {
+
+		browser.runtime.sendMessage({
+			type: type,
+			...data
 		});
 	
 	}
 
-	showStatus(elementId, message, type) {
+	showError(msg) {
 
-		const element = this.elements[elementId];
+		this.showStatus(
+			msg.error,
+			"error"
+		);
+	
+	}
 
-		if(!element)
-			return;
+	showStatus(msg, type = "info") {
 
-		if(this.statusTimeouts.has(elementId)) {
+		let elt = document.createElement("div");
 
-			clearTimeout(this.statusTimeouts.get(elementId));
-		
-		}
+		elt.className = `msg ${type}`;
 
-		element.textContent = message;
-		element.className = `status ${type}`;
-		element.style.display = "block";
-		
-		if(type === "success") {
+		const cnt = document.createElement("div");
 
-			const timeout = setTimeout(
-				() => {
+		cnt.className = "cnt";
 
-					element.style.display = "none";
-					this.statusTimeouts.delete(elementId);
+		cnt.textContent = msg;
+		elt.append(cnt);
+
+		const dis = document.createElement("div");
+
+		dis.className = "dis";
+
+		dis.addEventListener(
+			"click",
+			() =>
+				elt.remove(),
+			{
+				once: true
+			}
+		);
+
+		elt.append(dis);
+
+		this.elements.status.append(elt);
+
+		/*setTimeout(
+			() => {
+
+				if(elt.parentNode)
+					elt.remove();
+
+				elt = null;
 			
-				},
-				3000
-			);
-
-			this.statusTimeouts.set(
-				elementId,
-				timeout
-			);
-		
-		}
-	
-	}
-
-	clearStatus(elementId) {
-
-		const element = this.elements[elementId];
-
-		if(!element)
-			return;
-
-		if(this.statusTimeouts.has(elementId)) {
-
-			clearTimeout(this.statusTimeouts.get(elementId));
-			this.statusTimeouts.delete(elementId);
-		
-		}
-
-		element.style.display = "none";
-		element.textContent = "";
-	
-	}
-
-	clearAllStatus() {
-
-		this.statusTimeouts.forEach(timeout =>
-			clearTimeout(timeout));
-		this.statusTimeouts.clear();
-		
-		document.querySelectorAll(".status")
-		.forEach(el => {
-
-			el.style.display = "none";
-			el.textContent = "";
-		
-		});
+			},
+			8000
+		);*/
 	
 	}
 
 	setQuality(quality) {
+
+		if(!quality)
+			return;
 
 		const radio = document.querySelector(`input[value='${quality}']`);
 

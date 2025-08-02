@@ -2,182 +2,195 @@ class DashProcessor {
 
 	constructor() {
 
-		this.maxConcurrent = 6;
+		this.progress = 0;
+		this.totalsize = 0;
+
 		this.m4aProcessor = new M4aProcessor();
 	
 	}
 
-	async process(urls, metadata, messageId) {
+	async process(dat, metadata, messageId, coverData = null) {
 
-		if(!urls.length)
-			throw new Error("No URLs provided");
+		try {
 
-		const stream = new ReadableStream({
-			start: controller => {
+			this.progress = 0;
+			this.totalsize = 0;
 
-				this.downloadToStream(
-					urls,
-					messageId,
-					controller
-				)
-				.then(() =>
-					controller.close())
-				.catch(err =>
-					controller.error(err));
-			
-			}
-		});
+			const manifest = this.parseManifest(dat.man);
+			const audioData = await this.downloadAndCombine(manifest);
 
-		const response = new Response(
-			stream,
-			{
-				headers: {
-					"Content-Type": "audio/mp4"
+			const processed = await this.m4aProcessor.injectMetadata(
+				audioData,
+				metadata,
+				coverData
+			);
+
+			return URL.createObjectURL(new Blob(
+				[processed],
+				{
+					type: "audio/mp4"
 				}
-			}
-		);
-		
-		let blob = await response.blob();
-		
-		if(metadata) {
-
-			try {
-
-				const arrayBuffer = await blob.arrayBuffer();
-				const buffer = new Uint8Array(arrayBuffer);
-				const processedBuffer = await this.m4aProcessor.injectMetadata(
-					buffer,
-					metadata
-				);
-				
-				blob = new Blob(
-					[processedBuffer],
-					{
-						type: "audio/mp4"
-					}
-				);
-			
-			}
-			catch(err) {
-
-				console.warn(
-					"M4A metadata injection failed:",
-					err
-				);
-			
-			}
+			));
 		
 		}
+		catch(err) {
 
-		const url = URL.createObjectURL(blob);
+			console.error(
+				"metadata inject fail",
+				err
+			);
+
+			return null;
 		
-		setTimeout(
-			() => {
-
-				// console.log("revoke");
-				URL.revokeObjectURL(url);
-		
-			},
-			3456
-		);
-
-		return url;
+		}
 	
 	}
 
-	async downloadToStream(urls, messageId, controller) {
+	parseManifest(manifestXml) {
 
-		const completed = new Map();
-		let activeDownloads = 0;
-		let nextToWrite = 0;
-		let totalCompleted = 0;
-		let lastProgress = 0;
-
-		const writeCompleted = () => {
-
-			while(completed.has(nextToWrite)) {
-
-				const data = completed.get(nextToWrite);
-
-				controller.enqueue(data);
-				completed.delete(nextToWrite);
-				nextToWrite++;
-			
-			}
+		const parser = new DOMParser();
+		const doc = parser.parseFromString(
+			manifestXml,
+			"text/xml"
+		);
 		
-		};
-
-		const downloadSegment = async index => {
-
-			activeDownloads++;
-
-			try {
-
-				const response = await fetch(urls[index]);
-
-				if(!response.ok)
-					throw new Error(`HTTP ${response.status} for segment ${index}`);
-
-				const data = await response.arrayBuffer();
-
-				completed.set(
-					index,
-					new Uint8Array(data)
-				);
-				totalCompleted++;
-
-				const progress = Math.round(totalCompleted / urls.length * 100);
-
-				if(progress !== lastProgress) {
-
-					this.sendProgress(progress);
-					lastProgress = progress;
-				
-				}
-
-				writeCompleted();
-
-			}
-			finally {
-
-				activeDownloads--;
-			
-			}
+		const segmentTemplate = doc.querySelector("SegmentTemplate");
+		const initialization = segmentTemplate.getAttribute("initialization");
+		const mediaTemplate = segmentTemplate.getAttribute("media");
+		const startNumber = parseInt(segmentTemplate.getAttribute("startNumber")) || 1;
 		
+		const timeline = doc.querySelector("SegmentTimeline");
+		const segments = timeline.querySelectorAll("S");
+		
+		let segmentCount = 0;
+		
+		for(const segment of segments) {
+
+			const repeat = +(segment.getAttribute("r") || 0);
+
+			segmentCount += 1 + repeat;
+		
+		}
+		
+		return {
+			initialization,
+			mediaTemplate,
+			startNumber,
+			segmentCount
 		};
+	
+	}
 
-		let downloadIndex = 0;
+	async downloadAndCombine(manifest) {
 
-		while(downloadIndex < urls.length) {
+		const totalSegments = 1 + manifest.segmentCount;
+		let segments = [];
+		
+		// initialization segment
+		segments.push(await this.downloadSegment(
+			manifest.initialization,
+			0,
+			totalSegments
+		));
+		
+		// media segments
+		for(let i = 0; i < manifest.segmentCount; i++) {
 
-			if(activeDownloads < this.maxConcurrent) {
+			const segmentUrl = manifest.mediaTemplate.replace(
+				"$Number$",
+				manifest.startNumber + i
+			);
 
-				downloadSegment(downloadIndex++);
+			segments.push(await this.downloadSegment(
+				segmentUrl,
+				i + 1,
+				totalSegments
+			));
+		
+		}
+		
+		const combined = this.combineSegments(segments);
+		
+		segments = null;
+		
+		return combined;
+	
+	}
+
+	async downloadSegment(url, segmentIndex, totalSegments) {
+
+		const response = await fetch(url);
+		
+		if(!response.ok)
+			throw new Error(`segment ${segmentIndex} failed: ${response.status}`);
+		
+		const contentLength = +(response.headers.get("content-length") || 0);
+		
+		if(!contentLength)
+			throw new Error("no content length");
+		
+		let data = new Uint8Array(contentLength);
+		let position = 0;
+		
+		const reader = response.body.getReader();
+		
+		// dirty
+		// should be a simple await recursion
+		while(true) {
+
+			const {
+				done, value
+			} = await reader.read();
+			
+			if(done)
+				break;
+			
+			data.set(
+				value,
+				position
+			);
+
+			position += value.length;
+			
+			const segmentProgress = position / contentLength;
+			const overallProgress = Math.ceil((segmentIndex + segmentProgress) / totalSegments * 100);
+
+			if(overallProgress !== this.progress) {
+
+				this.sendProgress(overallProgress);
 			
 			}
-			else {
 
-				await new Promise(resolve =>
-					setTimeout(
-						resolve,
-						10
-					));
-			
-			}
+			this.progress = overallProgress;
+		
+		}
+		
+		reader.releaseLock();
+
+		this.totalsize += position;
+		
+		return data;
+	
+	}
+
+	combineSegments(segments) {
+
+		const combined = new Uint8Array(this.totalsize);
+		
+		let position = 0;
+
+		for(const segment of segments) {
+
+			combined.set(
+				segment,
+				position
+			);
+
+			position += segment.length;
 		
 		}
 
-		while(totalCompleted < urls.length) {
-
-			await new Promise(resolve =>
-				setTimeout(
-					resolve,
-					50
-				));
-		
-		}
-
-		writeCompleted();
+		return combined;
 	
 	}
 
@@ -204,12 +217,12 @@ class TidalOffscreenProcessor extends BaseOffscreenProcessor {
 	
 	}
 
-	async process(fetchUrl, metadata, messageId, cover) {
+	async process(dat, metadata, messageId, cover) {
 
-		if(fetchUrl.length === 1) {
+		if(dat?.url?.length === 1) {
 
 			return await this.flacProcessor.process(
-				fetchUrl[0],
+				dat,
 				metadata,
 				messageId,
 				cover
@@ -219,9 +232,10 @@ class TidalOffscreenProcessor extends BaseOffscreenProcessor {
 		else {
 
 			return await this.dashProcessor.process(
-				fetchUrl,
+				dat,
 				metadata,
-				messageId
+				messageId,
+				cover
 			);
 		
 		}

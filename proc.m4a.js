@@ -11,8 +11,8 @@ class M4aProcessor {
 		this.HDLR = 0x68646C72;
 		
 		this.UTF8_TYPE = 1;
-		this.JPEG_TYPE = 0;
-		this.PNG_TYPE = 1;
+		this.JPEG_TYPE = 13;
+		this.PNG_TYPE = 14;
 		
 		this.TAG_MAP = {
 			"TITLE": 0xa96E616D,
@@ -30,22 +30,19 @@ class M4aProcessor {
 	
 	}
 
-	async injectMetadata(buffer, metadata, coverImage = null) {
+	async injectMetadata(buffer, metadata, coverData = null) {
 
 		const atoms = this.parseAtoms(buffer);
 		const moovIndex = atoms.findIndex(a =>
 			a.type === this.MOOV);
 		
-		if(moovIndex === -1) {
-
-			throw new Error("No moov atom found");
-		
-		}
+		if(moovIndex === -1)
+			throw new Error("no moov atom");
 
 		atoms[moovIndex] = await this.updateMoovMetadata(
 			atoms[moovIndex],
 			metadata,
-			coverImage
+			coverData
 		);
 
 		return this.buildM4AFile(atoms);
@@ -108,7 +105,7 @@ class M4aProcessor {
 	
 	}
 
-	async updateMoovMetadata(moovAtom, metadata, coverImage) {
+	async updateMoovMetadata(moovAtom, metadata, coverData) {
 
 		const subAtoms = this.parseSubAtoms(
 			moovAtom.data,
@@ -122,7 +119,7 @@ class M4aProcessor {
 			subAtoms[udtaIndex] = await this.updateUdtaMetadata(
 				subAtoms[udtaIndex],
 				metadata,
-				coverImage
+				coverData
 			);
 		
 		}
@@ -130,7 +127,7 @@ class M4aProcessor {
 
 			subAtoms.push(await this.createUdtaAtom(
 				metadata,
-				coverImage
+				coverData
 			));
 		
 		}
@@ -184,7 +181,7 @@ class M4aProcessor {
 	
 	}
 
-	async updateUdtaMetadata(udtaAtom, metadata, coverImage) {
+	async updateUdtaMetadata(udtaAtom, metadata, coverData) {
 
 		const subAtoms = this.parseSubAtoms(
 			udtaAtom.data,
@@ -195,9 +192,9 @@ class M4aProcessor {
 		
 		if(metaIndex >= 0) {
 
-			subAtoms[metaIndex] = await this.updateMetaAtom(
+			subAtoms[metaIndex] = await this.createMetaAtom(
 				metadata,
-				coverImage
+				coverData
 			);
 		
 		}
@@ -205,7 +202,7 @@ class M4aProcessor {
 
 			subAtoms.push(await this.createMetaAtom(
 				metadata,
-				coverImage
+				coverData
 			));
 		
 		}
@@ -220,7 +217,7 @@ class M4aProcessor {
 	
 	}
 
-	async createUdtaAtom(metadata, coverImage) {
+	async createUdtaAtom(metadata, coverData) {
 
 		return {
 			type: this.UDTA,
@@ -228,27 +225,18 @@ class M4aProcessor {
 				this.UDTA,
 				[await this.createMetaAtom(
 					metadata,
-					coverImage
+					coverData
 				)]
 			)
 		};
 	
 	}
 
-	async updateMetaAtom(metadata, coverImage) {
-
-		return await this.createMetaAtom(
-			metadata,
-			coverImage
-		);
-	
-	}
-
-	async createMetaAtom(metadata, coverImage) {
+	async createMetaAtom(metadata, coverData) {
 
 		const ilstData = await this.buildIlstAtom(
 			metadata,
-			coverImage
+			coverData
 		);
 		const hdlrData = this.getHdlrAtom();
 		
@@ -266,7 +254,6 @@ class M4aProcessor {
 			this.META,
 			false
 		);
-		// version/flags
 		view.setUint32(
 			8,
 			0,
@@ -307,24 +294,21 @@ class M4aProcessor {
 				this.HDLR,
 				false
 			);
-			// version/flags
 			view.setUint32(
 				8,
 				0,
 				false
 			);
-			// pre_defined
 			view.setUint32(
 				12,
 				0,
 				false
 			);
+			
 			buffer.set(
 				this.encoder.encode("mdir"),
 				16
 			);
-
-			// reserved bytes & null terminator already 0
 			
 			this.hdlrCache = buffer;
 		
@@ -334,12 +318,11 @@ class M4aProcessor {
 	
 	}
 
-	async buildIlstAtom(metadata, coverImage) {
+	async buildIlstAtom(metadata, coverData) {
 
 		const tagBuffers = [];
 		let totalDataSize = 0;
 
-		// build text tags
 		for(const [tagName, value] of Object.entries(metadata)) {
 
 			const tagType = this.TAG_MAP[tagName.toUpperCase()];
@@ -358,10 +341,9 @@ class M4aProcessor {
 		
 		}
 
-		// build cover tag
-		if(coverImage) {
+		if(coverData) {
 
-			const coverBuffer = await this.buildCoverTag(coverImage);
+			const coverBuffer = this.buildCoverTag(coverData);
 
 			tagBuffers.push(coverBuffer);
 			totalDataSize += coverBuffer.length;
@@ -431,7 +413,6 @@ class M4aProcessor {
 			this.UTF8_TYPE,
 			false
 		);
-		// locale
 		view.setUint32(
 			20,
 			0,
@@ -447,11 +428,11 @@ class M4aProcessor {
 	
 	}
 
-	async buildCoverTag(imageFile) {
+	buildCoverTag(coverData) {
 
-		const imageData = new Uint8Array(await imageFile.arrayBuffer());
-		const imageType = imageFile.type.includes("png") ? this.PNG_TYPE : this.JPEG_TYPE;
-		const totalSize = 24 + imageData.length;
+		const imageBytes = new Uint8Array(coverData.data);
+		const imageType = (coverData.type || "").includes("png") ? this.PNG_TYPE : this.JPEG_TYPE;
+		const totalSize = 24 + imageBytes.length;
 		
 		const buffer = new Uint8Array(totalSize);
 		const view = new DataView(buffer.buffer);
@@ -468,7 +449,7 @@ class M4aProcessor {
 		);
 		view.setUint32(
 			8,
-			16 + imageData.length,
+			16 + imageBytes.length,
 			false
 		);
 		view.setUint32(
@@ -488,7 +469,7 @@ class M4aProcessor {
 		);
 		
 		buffer.set(
-			imageData,
+			imageBytes,
 			24
 		);
 

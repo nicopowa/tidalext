@@ -11,75 +11,74 @@ class FlacProcessor {
 	
 	}
 
-	async process(url, metadata, messageId, coverDat = null) {
+	async process(dat, metadata, messageId, coverDat = null) {
 
-		const response = await fetch(url);
+		dat.url = [dat.url].flat();
+
+		const response = await fetch(dat.url);
 
 		if(!response.ok)
-			throw new Error(`HTTP ${response.status}`);
+			throw new Error(`http ${response.status}`);
 
-		const contentLength = parseInt(response.headers.get("content-length")) || 0;
+		const contentLength = +(response.headers.get("content-length") || 0);
 
 		if(!contentLength)
-			throw new Error("No content");
+			throw new Error("no content");
+
+		let position = 0;
+		let progress = 0;
+		let data = new Uint8Array(contentLength);
 
 		const reader = response.body.getReader();
-		const chunks = [];
-		let receivedLength = 0;
-		let progressing = 0;
 
-		try {
+		const processChunk = ({
+			done, value
+		}) => {
 
-			while(true) {
+			if(done) {
 
-				const {
-					done, value
-				} = await reader.read();
+				// download complete
 
-				if(done)
-					break;
+				return;
 
-				chunks.push(value);
-				receivedLength += value.length;
-
-				const progress = Math.round(receivedLength / contentLength * 100);
-
-				if(progress !== progressing) {
-
-					this.sendProgress(progress);
-					progressing = progress;
-				
-				}
-			
 			}
-		
-		}
-		finally {
-
-			reader.releaseLock();
-		
-		}
-
-		const data = new Uint8Array(receivedLength);
-		let position = 0;
-
-		for(const chunk of chunks) {
 
 			data.set(
-				chunk,
+				value,
 				position
 			);
-			position += chunk.length;
-		
-		}
 
-		let processedData = data;
+			position += value.length;
+
+			const progressing = Math.ceil(position / contentLength * 100);
+
+			if(progressing !== progress) {
+
+				browser.runtime.sendMessage({
+					type: "loadProgress",
+					progress: progressing
+				});
+					
+			}
+
+			progress = progressing;
+
+			return reader.read()
+			.then(processChunk);
+
+		};
+
+		await reader.read()
+		.then(processChunk);
+
+		// useless ?
+		reader.releaseLock();
 
 		if(metadata) {
 
 			try {
 
-				processedData = this.injectMetadata(
+				data = this.injectMetadata(
 					data,
 					metadata,
 					coverDat
@@ -89,7 +88,7 @@ class FlacProcessor {
 			catch(err) {
 
 				console.warn(
-					"Metadata injection failed:",
+					"metadata inject fail",
 					err
 				);
 			
@@ -97,21 +96,20 @@ class FlacProcessor {
 		
 		}
 
-		return URL.createObjectURL(new Blob(
-			[processedData],
+		const blob = URL.createObjectURL(new Blob(
+			[data],
 			{
 				type: "audio/flac"
 			}
 		));
 
+		data = null;
+
+		return blob;
+
 	}
 
 	injectMetadata(buffer, metadata, coverImage = null) {
-
-		console.log(
-			"injectMetadata called with cover:",
-			!!coverImage
-		);
 	
 		const view = new DataView(
 			buffer.buffer,
@@ -123,7 +121,7 @@ class FlacProcessor {
 			false
 		) !== this.FLAC_SIGNATURE) {
 
-			console.log("Not a valid FLAC file");
+			console.log("invalid flac");
 
 			return buffer;
 		
@@ -145,27 +143,12 @@ class FlacProcessor {
 				break;
 		
 		}
-
-		return this.replaceMetadata(
-			buffer,
-			metadata,
-			endPos,
-			coverImage
-		);
-
-	}
-
-	replaceMetadata(buffer, metadata, endPos, coverImage) {
-
-		console.log(
-			"replaceMetadata called with cover:",
-			!!coverImage
-		);
 	
 		const blocks = this.extractBlocks(
 			buffer,
 			endPos
 		);
+
 		const vorbisBlock = this.buildVorbisComment(metadata);
 	
 		const newBlocks = [blocks[0]]; // keep STREAMINFO
@@ -176,28 +159,13 @@ class FlacProcessor {
 		});
 	
 		if(coverImage) {
-
-			console.log(
-				"Building picture block, cover data size:",
-				coverImage.data.byteLength
-			);
 			
 			const pictureBlock = this.buildPictureBlock(coverImage);
-
-			console.log(
-				"Picture block size:",
-				pictureBlock.length
-			);
 
 			newBlocks.push({
 				type: this.PICTURE_TYPE,
 				data: pictureBlock
 			});
-		
-		}
-		else {
-
-			console.log("no cover image provided");
 		
 		}
 
@@ -214,11 +182,6 @@ class FlacProcessor {
 		
 		}
 
-		console.log(
-			"Total blocks:",
-			newBlocks.length
-		);
-
 		return this.buildOutput(
 			newBlocks,
 			buffer,
@@ -230,10 +193,12 @@ class FlacProcessor {
 	extractBlocks(buffer, endPos) {
 
 		const blocks = [];
+
 		const view = new DataView(
 			buffer.buffer,
 			buffer.byteOffset
 		);
+
 		let pos = 4;
 		
 		while(pos < endPos) {
@@ -242,7 +207,9 @@ class FlacProcessor {
 				pos,
 				false
 			);
+
 			const type = (blockHeader >>> 24) & 0x7F;
+
 			const size = blockHeader & 0x00FFFFFF;
 			
 			blocks.push({
@@ -252,6 +219,7 @@ class FlacProcessor {
 					pos + 4 + size
 				)
 			});
+
 			pos += 4 + size;
 		
 		}
@@ -263,6 +231,7 @@ class FlacProcessor {
 	buildVorbisComment(metadata) {
 
 		const entries = [];
+
 		let totalSize = 4 + this.VENDOR_STRING.length + 4;
 
 		for(const [key, value] of Object.entries(metadata)) {
@@ -279,7 +248,9 @@ class FlacProcessor {
 		}
 		
 		const block = new Uint8Array(totalSize);
+
 		const view = new DataView(block.buffer);
+
 		let pos = 0;
 		
 		view.setUint32(
@@ -287,11 +258,14 @@ class FlacProcessor {
 			this.VENDOR_STRING.length,
 			true
 		);
+
 		pos += 4;
+
 		block.set(
 			this.VENDOR_STRING,
 			pos
 		);
+
 		pos += this.VENDOR_STRING.length;
 		
 		view.setUint32(
@@ -299,6 +273,7 @@ class FlacProcessor {
 			entries.length,
 			true
 		);
+
 		pos += 4;
 		
 		for(const entry of entries) {
@@ -308,11 +283,14 @@ class FlacProcessor {
 				entry.length,
 				true
 			);
+
 			pos += 4;
+
 			block.set(
 				entry,
 				pos
 			);
+
 			pos += entry.length;
 		
 		}
@@ -327,34 +305,31 @@ class FlacProcessor {
 		const mimeBytes = this.encoder.encode(imageData.type || "image/jpeg");
 		const totalSize = 32 + mimeBytes.length + imageBytes.length;
 	
-		console.log(
-			"buildPictureBlock - image bytes length:",
-			imageBytes.length,
-			"mime:",
-			imageData.type
-		);
-	
 		const block = new Uint8Array(totalSize);
 		const view = new DataView(block.buffer);
 		let pos = 0;
 	
-		// cover front
 		view.setUint32(
 			pos,
 			3,
 			false
 		);
+
 		pos += 4;
+
 		view.setUint32(
 			pos,
 			mimeBytes.length,
 			false
 		);
+
 		pos += 4;
+
 		block.set(
 			mimeBytes,
 			pos
 		);
+
 		pos += mimeBytes.length;
 	
 		// desc length (0) + dimensions + color info
@@ -362,34 +337,50 @@ class FlacProcessor {
 			pos,
 			0,
 			false
-		); pos += 4; // desc length
+		);
+		
+		pos += 4; // desc length
+
 		view.setUint32(
 			pos,
 			0,
 			false
-		); pos += 4; // width
+		);
+		
+		pos += 4; // width
+
 		view.setUint32(
 			pos,
 			0,
 			false
-		); pos += 4; // height
+		);
+		
+		pos += 4; // height
+
 		view.setUint32(
 			pos,
 			24,
 			false
-		); pos += 4; // color depth
+		);
+
+		pos += 4; // color depth
+
 		view.setUint32(
 			pos,
 			0,
 			false
-		); pos += 4; // num colors
+		);
+
+		pos += 4; // num colors
 	
 		view.setUint32(
 			pos,
 			imageBytes.length,
 			false
 		);
+
 		pos += 4;
+
 		block.set(
 			imageBytes,
 			pos
@@ -447,16 +438,6 @@ class FlacProcessor {
 		);
 
 		return output;
-	
-	}
-
-	sendProgress(progress) {
-
-		browser.runtime.sendMessage({
-			type: "loadProgress",
-			progress: progress
-		})
-		.catch(() => {});
 	
 	}
 
