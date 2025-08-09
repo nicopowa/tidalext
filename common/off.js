@@ -1,10 +1,11 @@
-const browser = chrome;
+import {browser, DEBUG} from "./vars.js";
 
 class BaseOffscreenProcessor {
 
 	constructor() {
 
 		this.blobs = new Map();
+		this.covrs = new Map();
 		
 		browser.runtime.onMessage.addListener(this.handleMessage.bind(this));
 	
@@ -14,19 +15,25 @@ class BaseOffscreenProcessor {
 
 		switch(msg.type) {
 
-			case "processStream":
-				this.handleProcessing(msg);
+			case "process":
+				this.procs(msg);
 				break;
 
-			case "clearStream":
-				this.clearStream(msg);
+			case "clear":
+				this.clear(msg);
 				break;
 
 		}
 
 	}
 	
-	handleProcessing(msg) {
+	procs(msg) {
+
+		if(DEBUG)
+			console.log(
+				"process",
+				msg
+			);
 
 		this.process(
 			msg.dat,
@@ -36,25 +43,44 @@ class BaseOffscreenProcessor {
 		)
 		.then(url => {
 
-			this.blobs.set(msg.id, url);
+			this.blobs.set(
+				msg.id,
+				url
+			);
+
+			const cvr = new Blob(
+				[new Uint8Array(msg.cover.data).buffer],
+				{
+					type: msg.cover.type
+				}
+			);
+
+			this.covrs.set(
+				msg.id,
+				cvr
+						
+			);
 
 			browser.runtime.sendMessage({
-				type: "streamComplete",
+				type: "complete",
 				ok: true,
 				id: msg.id,
-				url: url
+				url: url,
+				cvr: URL.createObjectURL(cvr)
 			});
 		
 		})
 		.catch(err => {
 
 			console.error(
-				"processing error:",
+				"process error",
 				err
 			);
+
+			// sendMessage "error"
 		
 			browser.runtime.sendMessage({
-				type: "streamComplete",
+				type: "complete",
 				ok: false,
 				id: msg.id,
 				error: err.message
@@ -64,13 +90,18 @@ class BaseOffscreenProcessor {
 
 	}
 
-	clearStream(msg) {
+	async process(dat, metadata, messageId, cover) {
+
+		// from child classes
+		return Promise.resolve("");
+	
+	}
+
+	clear(msg) {
 
 		const taskId = msg.id;
 
 		if(this.blobs.has(taskId)) {
-
-			console.log("clear", taskId);
 
 			URL.revokeObjectURL(this.blobs.get(taskId));
 
@@ -78,6 +109,18 @@ class BaseOffscreenProcessor {
 
 		}
 
+		if(this.covrs.has(taskId)) {
+
+			URL.revokeObjectURL(this.covrs.get(taskId));
+
+			this.covrs.delete(taskId);
+
+		}
+
 	}
 
 }
+
+export {
+	BaseOffscreenProcessor
+};

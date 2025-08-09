@@ -1,4 +1,4 @@
-const browser = chrome;
+import {browser, DEBUG} from "./vars.js";
 
 class BasePopup {
 
@@ -7,18 +7,11 @@ class BasePopup {
 		this.auth = false;
 		this.media = null;
 		this.queue = [];
-		this.current = [];
 
 		this.elements = {};
 		
-		[
-			"content", "nolink", "nomedia", "quality", "media", "mediainfo", "mediawrap", "medialist",
-			"queue", "queuelist", "status"
-		].forEach(id => {
-
-			this.elements[id] = document.getElementById(id);
-		
-		});
+		["musicext", "content", "nolink", "nomedia", "quality", "media", "mediainfo", "mediawrap", "medialist", "queue", "queuelist", "status"].forEach(id =>
+			(this.elements[id] = document.getElementById(id)));
 
 		this.elements.quality
 		.addEventListener(
@@ -106,9 +99,6 @@ class BasePopup {
 			}
 
 		}
-		else {
-
-		}
 	
 	}
 
@@ -134,21 +124,14 @@ class BasePopup {
 
 	updateProgress(msg) {
 
-		const prg = msg.progress;
+		const queueItem = document.querySelector(`.queue-item[data-task="${msg.task}"]`);
 
-		const currentProgressEl = document.querySelector(".queue-item .queued.load");
-		const currentProgressBar = document.querySelector(".queue-item .progress-fill");
+		if(queueItem) {
 
-		if(currentProgressEl && prg > 0) {
+			queueItem.querySelector(".queued").textContent
+			= queueItem.querySelector(".progress-fill").style.width
+			= `${msg.progress}%`;
 
-			currentProgressEl.textContent = `${prg}%`;
-		
-		}
-
-		if(currentProgressBar) {
-
-			currentProgressBar.style.width = `${prg}%`;
-		
 		}
 	
 	}
@@ -156,51 +139,28 @@ class BasePopup {
 	updateQueue(data) {
 
 		this.queue = data.items;
-		this.current = data.current;
-		
-		this.updateQueueDisplay();
-		
-		if(data.current?.status === "error") {
 
-			this.showStatus(
-				`download failed: ${data.current.error}`,
-				"error"
-			);
-		
-		}
-	
-	}
-
-	updateQueueDisplay() {
-
-		const allItems = this.current ? [this.current, ...this.queue] : this.queue;
-		
 		this.elements.queue.classList.toggle(
 			"hide",
-			!allItems.length
+			!this.queue.length
 		);
 		
-		if(allItems.length) {
-
-			this.elements.queuelist.innerHTML = allItems
-			.map(item =>
-				this.createQueueItemHTML(item))
-			.join("");
-		
-		}
+		this.elements.queuelist.innerHTML = this.queue
+		.map(item =>
+			this.createQueueItemHTML(item))
+		.join("");
 	
 	}
 
 	createQueueItemHTML(item) {
 
-		const isDownloading = item.status === "load";
-
 		return `
-			<div class="queue-item">
+			<div class="queue-item" data-task="${item.id}">
 				<div class="queue-info">
-					<div class="queue-title">${item.title}</div>
+					<div class="track-title">${item.infos.title}</div>
+					<div class="track-artist">${item.infos.artist}</div>
 				</div>
-				<div class="queued ${item.status}">${isDownloading ? `${item.progress}%` : item.status}</div>
+				<div class="queued ${item.status}">${item.status === "load" ? `${item.progress}%` : item.status}</div>
 				<div class="queue-progress">
 					<div class="progress-fill" style="width: ${item.progress}%"></div>
 				</div>
@@ -241,25 +201,33 @@ class BasePopup {
 				"load": "refresh page"
 			};
 
-			this.elements.nolink.innerHTML = `<div id="unlinked">extension not linked</div>
+			this.elements.nolink.innerHTML = `<div id="unlinked">not linked</div>
 				<div id="linker">${msgs[msg.need]}</div>`;
 
 			document.querySelector("#linker")
 			.addEventListener(
 				"click",
-				() =>
+				() => {
+
+					this.elements.nolink.innerHTML = "<div id=\"unlinked\">linking ...</div>";
+
 					this.send(
 						"link",
 						{
 							how: msg.need
 						}
-					),
+					);
+				
+				},
 				{
 					once: true
 				}
 			);
 
 		}
+
+		if(msg.next)
+			this.elements.musicext.classList.add("next");
 	
 	}
 
@@ -269,14 +237,19 @@ class BasePopup {
 			"download",
 			{
 				mediaType: media.dataset.type,
-				mediaId: media.dataset.id,
-				quality: this.getQuality()
+				mediaId: media.dataset.id
 			}
 		);
 
 	}
 
 	send(type, data) {
+
+		if(DEBUG)
+			console.log(
+				"pop send",
+				type
+			);
 
 		browser.runtime.sendMessage({
 			type: type,
@@ -324,7 +297,7 @@ class BasePopup {
 
 		this.elements.status.append(elt);
 
-		/*setTimeout(
+		setTimeout(
 			() => {
 
 				if(elt.parentNode)
@@ -333,8 +306,8 @@ class BasePopup {
 				elt = null;
 			
 			},
-			8000
-		);*/
+			7500
+		);
 	
 	}
 
@@ -357,3 +330,7 @@ class BasePopup {
 	}
 
 }
+
+export {
+	BasePopup
+};

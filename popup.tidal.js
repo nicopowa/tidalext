@@ -1,3 +1,6 @@
+import {browser, DEBUG} from "./common/vars.js";
+import {BasePopup} from "./common/pops.js";
+
 class TidalPopup extends BasePopup {
 
 	constructor() {
@@ -75,7 +78,7 @@ class TidalPopup extends BasePopup {
 
 	renderArtist() {
 
-		const cover = this.media.item.data.picture.replaceAll(
+		const cover = (this.media.item.data?.picture || "").replaceAll(
 			"-",
 			"/"
 		);

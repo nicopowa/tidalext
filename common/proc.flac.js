@@ -1,3 +1,5 @@
+import {browser, DEBUG} from "./vars.js";
+
 class FlacProcessor {
 
 	constructor() {
@@ -11,7 +13,9 @@ class FlacProcessor {
 	
 	}
 
-	async process(dat, metadata, messageId, coverDat = null) {
+	async process(dat, metadata, taskId, coverDat = null) {
+
+		if(DEBUG) console.log("process", taskId);
 
 		dat.url = [dat.url].flat();
 
@@ -55,7 +59,8 @@ class FlacProcessor {
 			if(progressing !== progress) {
 
 				browser.runtime.sendMessage({
-					type: "loadProgress",
+					type: "progress",
+					task: taskId, 
 					progress: progressing
 				});
 					
@@ -121,7 +126,7 @@ class FlacProcessor {
 			false
 		) !== this.FLAC_SIGNATURE) {
 
-			console.log("invalid flac");
+			console.error("invalid flac");
 
 			return buffer;
 		
@@ -151,7 +156,8 @@ class FlacProcessor {
 
 		const vorbisBlock = this.buildVorbisComment(metadata);
 	
-		const newBlocks = [blocks[0]]; // keep STREAMINFO
+		// keep STREAMINFO
+		const newBlocks = [blocks[0]];
 
 		newBlocks.push({
 			type: this.VORBIS_COMMENT_TYPE,
@@ -394,15 +400,13 @@ class FlacProcessor {
 
 		let metadataSize = 4;
 
-		for(const block of blocks) {
-
+		for(const block of blocks) 
 			metadataSize += 4 + block.data.length;
-		
-		}
 
 		const audioSize = originalBuffer.length - endPos;
 		const output = new Uint8Array(metadataSize + audioSize);
 		const view = new DataView(output.buffer);
+
 		let pos = 0;
 
 		view.setUint32(
@@ -410,6 +414,7 @@ class FlacProcessor {
 			this.FLAC_SIGNATURE,
 			false
 		);
+
 		pos += 4;
 
 		for(let i = 0; i < blocks.length; i++) {
@@ -423,11 +428,14 @@ class FlacProcessor {
 				header,
 				false
 			);
+
 			pos += 4;
+
 			output.set(
 				block.data,
 				pos
 			);
+
 			pos += block.data.length;
 		
 		}
@@ -442,3 +450,5 @@ class FlacProcessor {
 	}
 
 }
+
+export {FlacProcessor}

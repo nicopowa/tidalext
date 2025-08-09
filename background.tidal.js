@@ -1,3 +1,4 @@
+import {browser, DEBUG} from "./common/vars.js";
 import {Backstage} from "./common/back.js";
 
 class TidalBackground extends Backstage {
@@ -7,6 +8,8 @@ class TidalBackground extends Backstage {
 		super("offscreen.tidal.html");
 
 		this.urlBase = "https://listen.tidal.com/";
+
+		this.quality = "LOSSLESS";
 
 		this.dat = {
 			auth: false,
@@ -30,7 +33,8 @@ class TidalBackground extends Backstage {
 
 		if(authHeader) {
 
-			console.log("auth data");
+			if(DEBUG)
+				console.log("auth data");
 
 			if(authHeader.value !== this.dat.accessToken) {
 
@@ -94,10 +98,11 @@ class TidalBackground extends Backstage {
 			extype: "album"
 		};
 
-		console.log(
-			"album",
-			this.media
-		);
+		if(DEBUG)
+			console.log(
+				"album",
+				this.media
+			);
 
 		this.mediaHint();
 
@@ -112,10 +117,11 @@ class TidalBackground extends Backstage {
 			extype: "releases"
 		};
 
-		console.log(
-			"releases",
-			this.media
-		);
+		if(DEBUG)
+			console.log(
+				"releases",
+				this.media
+			);
 
 		this.syncMedia();
 	
@@ -128,10 +134,11 @@ class TidalBackground extends Backstage {
 			extype: "artist"
 		};
 
-		console.log(
-			"artist",
-			this.media
-		);
+		if(DEBUG)
+			console.log(
+				"artist",
+				this.media
+			);
 
 		this.syncMedia();
 
@@ -143,9 +150,19 @@ class TidalBackground extends Backstage {
 	
 	}
 
+	getTrackInfos(track, album) {
+
+		return {
+			title: this.trackTitle(track),
+			album: this.albumTitle(album),
+			artist: track.artists[0].name
+		};
+	
+	}
+
 	async getTrackUrl(trackId, quality) {
 
-		// wtf
+		// what
 		if(quality === "HIRES_LOSSLESS")
 			quality = "HI_RES_LOSSLESS";
 
@@ -167,7 +184,7 @@ class TidalBackground extends Backstage {
 
 		const manifestText = atob(trackManifest.manifest);
 
-		// console.log(manifestText);
+		// if(DEBUG) console.log(manifestText);
 
 		try {
 
@@ -203,7 +220,7 @@ class TidalBackground extends Backstage {
 
 	getFilePath(track, album) {
 
-		const variousArtists = album?.artists.length === 1 
+		const variousArtists = album?.artists.length === 1
 		&& album.artists[0].name.toLowerCase() === "various artists";
 
 		const artistName = this.sanitize(variousArtists ? "Various Artists" : album?.artists[0]?.name);

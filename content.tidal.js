@@ -15,17 +15,9 @@
 	const script = document.createElement("script");
 
 	script.src = browser.runtime.getURL("inject.tidal.js");
-	// script.type = "text/javascript";
 	
 	script.onload = () =>
 		script.remove();
-	
-	script.onerror = err =>
-		browser.runtime.sendMessage({
-			type: "error",
-			msg: "inject fail",
-			error: err
-		});
 	
 	(document.head || document.documentElement).appendChild(script);
 

@@ -546,3 +546,5 @@ class M4aProcessor {
 	}
 
 }
+
+export {M4aProcessor}
