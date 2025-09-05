@@ -1,7 +1,7 @@
 const browser = chrome;
-const DEBUG = false;
+const DEBUG = true;
 
 export {
-	browser, 
+	browser,
 	DEBUG
 };

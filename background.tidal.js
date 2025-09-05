@@ -7,12 +7,11 @@ class TidalBackground extends Backstage {
 
 		super("offscreen.tidal.html");
 
-		this.urlBase = "https://listen.tidal.com/";
-
+		this.urlBase = "https://tidal.com/";
 		this.quality = "LOSSLESS";
 
 		this.dat = {
-			auth: false,
+			...this.dat,
 			clientId: "zU4XHVVkc2tDPo4t",
 			accessToken: ""
 		};
@@ -78,7 +77,7 @@ class TidalBackground extends Backstage {
 	
 	}
 
-	handleAlbum(dat) {
+	handleAlbum(tab, dat) {
 
 		const modules = dat.rows.map(row =>
 			row.modules?.[0]);
@@ -89,64 +88,107 @@ class TidalBackground extends Backstage {
 		const albumTracks = modules.find(module =>
 			module.type === "ALBUM_ITEMS")?.pagedList?.items.filter(item =>
 			item.type === "track")
-		.map(item =>
-			item.item);
+		.map(track =>
+			track.item);
 
-		this.media = {
+		dat = {
 			...albumInfos,
 			tracks: albumTracks,
 			extype: "album"
 		};
 
+		this.medias.set(
+			tab.id,
+			dat
+		);
+
 		if(DEBUG)
 			console.log(
-				"album",
-				this.media
+				tab.id,
+				dat.extype,
+				dat
 			);
 
 		this.mediaHint();
 
-		this.syncMedia();
+		this.syncPopup();
 
 	}
 
-	handleReleases(dat) {
+	handleReleases(tab, dat) {
 
-		this.media = {
+		dat = {
 			...dat,
 			extype: "releases"
 		};
 
+		this.medias.set(
+			tab.id,
+			dat
+		);
+
 		if(DEBUG)
 			console.log(
-				"releases",
-				this.media
+				tab.id,
+				dat.extype,
+				dat
 			);
 
-		this.syncMedia();
+		this.syncPopup();
 	
 	}
 
-	handleArtist(dat) {
+	handleArtist(tab, dat) {
 
-		this.media = {
+		dat = {
 			...dat,
 			extype: "artist"
 		};
 
+		this.medias.set(
+			tab.id,
+			dat
+		);
+
 		if(DEBUG)
 			console.log(
-				"artist",
-				this.media
+				tab.id,
+				dat.extype,
+				dat
 			);
 
-		this.syncMedia();
+		this.syncPopup();
 
 	}
 
-	trackList() {
+	handleLabel(tab, dat) {
 
-		return this.media?.tracks || [];
+	}
+
+	handlePlaylist(tab, dat) {
+
+		dat = {
+			...dat,
+			extype: "playlist"
+		};
+
+		this.medias.set(
+			tab.id,
+			dat
+		);
+
+		if(DEBUG)
+			console.log(
+				tab.id,
+				dat.extype,
+				dat
+			);
+
+	}
+
+	trackList(tabId) {
+
+		return this.medias.get(tabId)?.tracks || [];
 	
 	}
 
@@ -160,14 +202,21 @@ class TidalBackground extends Backstage {
 	
 	}
 
-	async getTrackUrl(trackId, quality) {
+	async getTrackUrl(track, quality) {
 
-		// what
-		if(quality === "HIRES_LOSSLESS")
-			quality = "HI_RES_LOSSLESS";
+		super.getTrackUrl(
+			track.id,
+			quality
+		);
+		
+		// what ?
+		quality = quality.replace(
+			"HIRES",
+			"HI_RES"
+		);
 
 		const trackManifest = await this.request(
-			`tracks/${trackId}/playbackinfopostpaywall`,
+			`tracks/${track.id}/playbackinfopostpaywall`,
 			{
 				playbackmode: "STREAM",
 				assetpresentation: "FULL",
@@ -186,30 +235,14 @@ class TidalBackground extends Backstage {
 
 		// if(DEBUG) console.log(manifestText);
 
-		try {
-
-			// JSON manifest = FLAC
-			const manifestJson = JSON.parse(manifestText);
-
-			return {
-				url: manifestJson.urls || [],
-				man: manifestJson,
-				format: "flac"
-			};
-		
-		}
-		catch(err) {
-
-			return {
-				man: manifestText,
-				format: "m4a"
-			};
-		
-		}
+		return {
+			man: manifestText,
+			format: "m4a"
+		};
 	
 	}
 
-	getCoverUrl(media) {
+	getCoverUrl(tabId, media) {
 
 		return `https://resources.tidal.com/images/${(media?.album?.cover || media.cover).replaceAll(
 			"-",

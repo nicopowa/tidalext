@@ -9,22 +9,15 @@
 		"default_popup": "popup.tidal.html",
 		"default_title": "TidalExt"
 	},
-	"permissions": [
-		"storage",
-		"downloads",
-		"webRequest",
-		"offscreen"
-	],
-	"host_permissions": [
-		"https://*.tidal.com/*"
-	],
+	"permissions": ["storage", "downloads", "webRequest", "offscreen"],
+	"host_permissions": ["https://*.tidal.com/*"],
 	"background": {
 		"service_worker": "background.tidal.js",
 		"type": "module"
 	},
 	"content_scripts": [
 		{
-			"matches": ["https://listen.tidal.com/*"],
+			"matches": ["https://tidal.com/*"],
 			"js": ["content.tidal.js"],
 			"run_at": "document_start",
 			"all_frames": false
@@ -32,7 +25,7 @@
 	],
 	"web_accessible_resources": [
 		{
-			"matches": ["https://listen.tidal.com/*"],
+			"matches": ["https://tidal.com/*"],
 			"resources": ["inject.tidal.js"]
 		}
 	],

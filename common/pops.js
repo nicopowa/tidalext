@@ -30,11 +30,9 @@ class BasePopup {
 
 	handleMessage(msg) {
 
-		switch(msg.type) {
+		// console.log(msg);
 
-			case "media":
-				this.updateMedia(msg);
-				break;
+		switch(msg.type) {
 
 			case "sync":
 				this.updateState(msg);
@@ -60,19 +58,27 @@ class BasePopup {
 
 		this.media = msg.media;
 
+		// console.log(this.media);
+
+		this.setQuality(msg.settings.quality);
+
+		this.elements.nolink.classList.add(
+			"hide"
+		);
+
 		this.elements.media.classList.toggle(
 			"hide",
-			!this.media || !this.auth
+			!this.media
 		);
 
 		this.elements.quality.classList.toggle(
 			"hide",
-			!this.media || !this.auth
+			!this.media
 		);
 
 		this.elements.nomedia.classList.toggle(
 			"hide",
-			!!this.media || !this.auth
+			!this.auth || !!this.media
 		);
 
 		if(this.auth && this.media) {
@@ -184,51 +190,67 @@ class BasePopup {
 
 	updateState(msg) {
 
+		console.log(msg);
+
 		this.auth = msg.auth || false;
 
-		this.setQuality(msg.settings.quality);
-
-		this.elements.nolink.classList.toggle(
-			"hide",
-			!!this.auth
-		);
-
-		if(!this.auth) {
-
-			const msgs = {
-				"open": "open player",
-				"swap": "jump to tab",
-				"load": "refresh page"
-			};
-
-			this.elements.nolink.innerHTML = `<div id="unlinked">not linked</div>
-				<div id="linker">${msgs[msg.need]}</div>`;
-
-			document.querySelector("#linker")
-			.addEventListener(
-				"click",
-				() => {
-
-					this.elements.nolink.innerHTML = "<div id=\"unlinked\">linking ...</div>";
-
-					this.send(
-						"link",
-						{
-							how: msg.need
-						}
-					);
-				
-				},
-				{
-					once: true
-				}
-			);
-
-		}
+		// if(msg.actv && !!msg.media)
+		if(msg.media)
+			this.updateMedia(msg);
+		else if(msg.actv)
+			this.syncPlease("load");
+		else if(msg.last)
+			this.syncPlease("swap");
+		else if(!msg.auth)
+			this.syncPlease("open");
+		else
+			console.log("nope");
 
 		if(msg.next)
 			this.elements.musicext.classList.add("next");
 	
+	}
+
+	syncPlease(what) {
+
+		console.log(
+			"sync",
+			what
+		);
+
+		this.elements.nolink.classList.remove(
+			"hide"
+		);
+
+		const msgs = {
+			"open": "open player",
+			"swap": "jump to tab",
+			"load": "refresh page"
+		};
+
+		this.elements.nolink.innerHTML = `<div id="unlinked">not linked</div>
+				<div id="linker">${msgs[what]}</div>`;
+
+		document.querySelector("#linker")
+		.addEventListener(
+			"click",
+			() => {
+
+				this.elements.nolink.innerHTML = "<div id=\"unlinked\">linking ...</div>";
+
+				this.send(
+					"link",
+					{
+						how: what
+					}
+				);
+				
+			},
+			{
+				once: true
+			}
+		);
+
 	}
 
 	downloadMedia(media) {
@@ -247,7 +269,7 @@ class BasePopup {
 
 		if(DEBUG)
 			console.log(
-				"pop send",
+				"pops >>",
 				type
 			);
 
@@ -297,17 +319,18 @@ class BasePopup {
 
 		this.elements.status.append(elt);
 
-		setTimeout(
-			() => {
+		if(type !== "error")
+			setTimeout(
+				() => {
 
-				if(elt.parentNode)
-					elt.remove();
+					if(elt.parentNode)
+						elt.remove();
 
-				elt = null;
+					elt = null;
 			
-			},
-			7500
-		);
+				},
+				5678
+			);
 	
 	}
 

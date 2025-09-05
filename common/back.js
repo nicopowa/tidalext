@@ -4,28 +4,33 @@ class Backstage {
 
 	constructor(proc) {
 
+		this.downloadCovers = false;
+
 		this.dat = {
 			auth: false,
 			next: false
 		};
 
+		this.medias = new Map();
 		this.tracks = new Map();
 		this.icon = new Icn();
+		this.quality = ""; // default quality
+
 		this.queue = new Queue(
 			this,
 			proc
 		);
 
 		this.urlBase = ""; // service url
-		this.urlHost = browser.runtime.getManifest().host_permissions[0];
-		this.media = null; // current media
-		this.quality = ""; // default quality
-
+		this.urlHost = this.manifest().host_permissions[0];
+		
 		[
 			[browser.runtime.onStartup, this.liftoff],
 			[browser.runtime.onInstalled, this.liftoff],
 			[browser.downloads.onChanged, this.downloadProgress],
 			[browser.commands.onCommand, this.handleCommand],
+			// [browser.tabs.onUpdated, this.onTabUpdate],
+			[browser.tabs.onRemoved, this.onTabRemove],
 			[browser.runtime.onMessage, this.handleMessage]
 		].forEach(([api, cbk]) =>
 			api.addListener(cbk.bind(this)));
@@ -36,7 +41,7 @@ class Backstage {
 
 		// if(DEBUG) console.log("lift off");
 		// browser startup || extension installed
-		this.icon.back("#ff8c00");
+		// this.icon.back("#ff8c00");
 		this.update();
 	
 	}
@@ -68,6 +73,13 @@ class Backstage {
 				this.dat.next = true;
 			
 			}
+		
+		})
+		.catch(() => {
+
+			// silent fail
+			console.log("update fail");
+			// this.handleError({ error: err });
 		
 		});
 
@@ -105,11 +117,12 @@ class Backstage {
 
 		if(DEBUG)
 			console.log(
-				"bak send",
-				type
+				"back >>",
+				type,
+				data
 			);
 
-		browser.runtime.sendMessage({
+		return browser.runtime.sendMessage({
 			type: type,
 			...data
 		});
@@ -118,13 +131,14 @@ class Backstage {
 
 	async ready() {
 
-		this.loginHint();
+		if(DEBUG)
+			console.log("ready");
 
-		this.syncPopup();
+		// this.syncPopup();
 	
 	}
 
-	async handleMessage(msg) {
+	async handleMessage(msg, src) {
 
 		// if(DEBUG) console.log(msg);
 
@@ -151,7 +165,10 @@ class Backstage {
 				break;
 
 			case "fetch":
-				this.handleFetch(msg);
+				this.handleFetch(
+					msg,
+					src.tab
+				);
 				break;
 
 			case "save":
@@ -177,6 +194,44 @@ class Backstage {
 	
 	}
 
+	onTabUpdate(tabId, info, tab) {
+
+		// blank tab
+		if(!tab.url)
+			return;
+
+		// console.log("up", tab, info);
+
+		if(info?.status === "loading") {
+			
+			console.log("loading");
+		
+		}
+		else if(info?.status === "complete") {
+
+			console.log("complete");
+		
+		}
+	
+	}
+
+	onTabRemove(tabId, info) {
+
+		if(this.medias.has(tabId)) {
+
+			if(DEBUG)
+				console.log(
+					"rm",
+					tabId
+					// info
+				);
+
+			this.medias.delete(tabId);
+		
+		}
+	
+	}
+
 	async popped() {
 
 		return !!(
@@ -192,44 +247,37 @@ class Backstage {
 		if(!(await this.popped()))
 			return;
 
-		const [tab] = await this.lastTab();
+		const cur = await this.curTab();
+		const lst = await this.lastTab();
+		const tab = cur || lst;
 
-		this.send(
+		await this.send(
 			"sync",
 			{
 				auth: this.dat.auth,
 				next: this.dat.next,
-				need: this.dat.auth
+
+				actv: tab?.active,
+				last: !!lst,
+
+				/*need: this.dat.auth
 					? "nope"
 					: !tab
 						? "open"
 						: !tab?.active
 							? "swap"
-							: "load",
+							: "load",*/
+							
 				settings: await browser.storage.local.get([
 					"quality"
-					// more props
-				])
+					// more settings
+				]),
+
+				media: this.medias.get(tab?.id) || null
 			}
 		);
 
-		this.syncMedia();
-		this.sendQueue();
-	
-	}
-
-	async syncMedia() {
-
-		if(await this.popped()) {
-
-			this.send(
-				"media",
-				{
-					media: this.media
-				}
-			);
-		
-		}
+		await this.sendQueue();
 	
 	}
 
@@ -241,12 +289,25 @@ class Backstage {
 	
 	}
 
-	lastTab() {
+	async curTab() {
 
-		return browser.tabs.query({
+		const [cur] = await browser.tabs.query({
+			url: [this.urlHost],
+			active: true
+		});
+
+		return cur;
+	
+	}
+
+	async lastTab() {
+
+		const [last] = await browser.tabs.query({
 			url: [this.urlHost],
 			lastFocusedWindow: true
 		});
+
+		return last;
 	
 	}
 
@@ -264,15 +325,6 @@ class Backstage {
 	reloadTab(tab) {
 
 		return browser.tabs.reload(tab.id);
-	
-	}
-
-	curTab() {
-
-		return browser.tabs.query({
-			url: [this.urlHost],
-			active: true
-		});
 	
 	}
 
@@ -294,7 +346,7 @@ class Backstage {
 				break;
 
 			case "swap":
-				[tab] = await this.lastTab();
+				tab = await this.lastTab();
 
 				if(tab) {
 
@@ -307,7 +359,7 @@ class Backstage {
 				break;
 
 			case "load":
-				[tab] = await this.curTab();
+				tab = await this.curTab();
 
 				if(tab)
 					await this.reloadTab(tab);
@@ -328,6 +380,16 @@ class Backstage {
 
 			const quality = (await this.getSetting("quality")) || this.quality;
 
+			const tab = await this.curTab();
+
+			if(!this.medias.has(tab.id)) {
+
+				console.log("nope");
+
+				return;
+			
+			}
+
 			if(DEBUG)
 				console.log(
 					"download",
@@ -338,7 +400,7 @@ class Backstage {
 
 			if(mediaType === "track") {
 
-				const track = this.trackList()
+				const track = this.trackList(tab.id)
 				.find(
 					trk =>
 						trk.id === +mediaId
@@ -347,12 +409,15 @@ class Backstage {
 				if(track) {
 
 					const coverBlob = await this.getCover(
-						this.getCoverUrl(track)
+						this.getCoverUrl(
+							tab.id,
+							track
+						)
 					);
 
 					this.trackDownload(
 						track,
-						this.media,
+						this.medias.get(tab.id),
 						quality,
 						coverBlob
 					);
@@ -363,14 +428,17 @@ class Backstage {
 			else if(mediaType === "album") {
 
 				const coverBlob = await this.getCover(
-					this.getCoverUrl(this.media)
+					this.getCoverUrl(
+						tab.id,
+						this.medias.get(tab.id)
+					)
 				);
 
-				this.trackList()
+				this.trackList(tab.id)
 				.forEach(track =>
 					this.trackDownload(
 						track,
-						this.media,
+						this.medias.get(tab.id),
 						quality,
 						coverBlob
 					));
@@ -421,7 +489,7 @@ class Backstage {
 
 			if(await this.popped()) {
 
-				this.send(
+				await this.send(
 					"error",
 					{
 						error: msg.error
@@ -448,7 +516,7 @@ class Backstage {
 	async sendQueue() {
 
 		if(await this.popped())
-			this.send(
+			await this.send(
 				"queue",
 				{
 					items: this.queue.tasks.map(t =>
@@ -464,19 +532,13 @@ class Backstage {
 	
 	}
 
-	loginHint() {
-
-		this.icon.temp("#22c566");
-	
-	}
-
 	mediaHint() {
 
 		this.icon.temp("#226bc5");
 	
 	}
 
-	handleFetch(msg) {
+	handleFetch(msg, tab) {
 
 		const {
 			url, hit, sts, dat, opt
@@ -487,6 +549,7 @@ class Backstage {
 			// if(DEBUG) console.log("hit", hit);
 
 			this.tracks.get(hit)(
+				tab,
 				dat,
 				opt
 			);
@@ -512,9 +575,18 @@ class Backstage {
 		// child classes
 	}
 
-	getTrackUrl(trackId, quality) {}
+	getTrackUrl(track, quality) {
 
-	getCoverUrl(media) {
+		if(DEBUG)
+			console.log(
+				"track url",
+				track,
+				quality
+			);
+	
+	}
+
+	getCoverUrl(tabId, media) {
 		// child classes
 	}
 
@@ -540,7 +612,7 @@ class Backstage {
 			),
 			file: this.getFilePath(
 				track,
-				this.media
+				album
 			),
 			meta: this.getMetaData(
 				track,
@@ -552,7 +624,7 @@ class Backstage {
 	
 	}
 
-	trackList() {
+	trackList(tabId) {
 
 		// child classes
 		return [];
@@ -586,7 +658,7 @@ class Backstage {
 	
 	}
 
-	downloadProgress(delta) {
+	async downloadProgress(delta) {
 
 		if(this.queue.blobs.has(delta.id)) {
 
@@ -596,7 +668,7 @@ class Backstage {
 
 				this.icon.reset();
 
-				this.send(
+				await this.send(
 					"clear",
 					{
 						id: this.queue.blobs.get(delta.id)
@@ -634,7 +706,7 @@ class Icn {
 		)
 		.toUpperCase();
 
-		this.size = 48;
+		this.size = 64;
 
 		this.fade = "ae";
 
@@ -649,19 +721,19 @@ class Icn {
 			this.size
 		);
 
-		this.ictx = this.icon.getContext(
+		this.ctx = this.icon.getContext(
 			"2d",
 			{
-				alpha: false,
+				alpha: true,
 				willReadFrequently: true
 			}
 		);
 
-		this.ictx.font = Math.round((this.size * 3) / 4) + "px Arial";
-		this.ictx.textAlign = "center";
-		this.ictx.textBaseline = "alphabetic";
+		this.ctx.font = Math.round(this.size * 4 / 5) + "px Arial";
+		this.ctx.textAlign = "center";
+		this.ctx.textBaseline = "alphabetic";
 
-		const metrics = this.ictx.measureText(this.letter);
+		const metrics = this.ctx.measureText(this.letter);
 
 		this.x = this.size / 2;
 		this.y
@@ -702,9 +774,9 @@ class Icn {
 
 	temp(color) {
 
-		this.back(color);
-
 		clearTimeout(this.timed);
+
+		this.back(color);
 
 		this.timed = setTimeout(
 			() =>
@@ -730,16 +802,16 @@ class Icn {
 
 	render() {
 
-		this.ictx.clearRect(
+		this.ctx.clearRect(
 			0,
 			0,
 			this.size,
 			this.size
 		);
 
-		this.ictx.fillStyle = this.backColor;
+		this.ctx.fillStyle = this.backColor;
 
-		this.ictx.fillRect(
+		this.ctx.fillRect(
 			0,
 			0,
 			this.size,
@@ -751,9 +823,9 @@ class Icn {
 			const progressWidth = (this.progressPercent / 100) * this.size;
 			const progressY = this.size - this.progressHeight;
 
-			this.ictx.fillStyle = this.progressColor;
+			this.ctx.fillStyle = this.progressColor;
 
-			this.ictx.fillRect(
+			this.ctx.fillRect(
 				0,
 				progressY,
 				progressWidth,
@@ -762,16 +834,16 @@ class Icn {
 		
 		}
 
-		this.ictx.fillStyle = this.textColor;
+		this.ctx.fillStyle = this.textColor;
 
-		this.ictx.fillText(
+		this.ctx.fillText(
 			this.letter,
 			this.x,
 			this.y
 		);
 
 		browser.action.setIcon({
-			imageData: this.ictx.getImageData(
+			imageData: this.ctx.getImageData(
 				0,
 				0,
 				this.size,
@@ -865,7 +937,6 @@ class Queue {
 
 		this.current = this.tasks[0];
 		this.current.status = "load";
-		this.current.progress = 0;
 		this.main.sendQueue();
 
 		this.downloadTask(this.current);
@@ -874,8 +945,13 @@ class Queue {
 
 	async downloadTask(task) {
 
+		console.log(
+			"task",
+			task
+		);
+
 		const trackData = await this.main.getTrackUrl(
-			task.track.id,
+			task.track,
 			task.quality
 		);
 
@@ -920,20 +996,24 @@ class Queue {
 					this.current.id
 				);
 
-				const downloadCoverId = await browser.downloads.download({
-					url: msg.cvr,
-					filename: [...this.current.file.split("/")
-					.slice(
-						0,
-						-1
-					), "cover"].join("/") + "." + this.current.cover.type.split("/")[1].replace(
-						"jpeg",
-						"jpg"
-					),
-					conflictAction: "overwrite"
-				});
+				if(this.main.downloadCovers) {
 
-				this.current.status = "done";
+					const downloadCoverId = await browser.downloads.download({
+						url: msg.cvr,
+						filename: [...this.current.file.split("/")
+						.slice(
+							0,
+							-1
+						), "cover"].join("/") + "." + this.current.cover.type.split("/")[1].replace(
+							"jpeg",
+							"jpg"
+						),
+						conflictAction: "overwrite"
+					});
+				
+				}
+
+				this.current.status = "ok";
 			
 			}
 			else {

@@ -16,7 +16,7 @@ class DashProcessor {
 
 	async process(dat, metadata, taskId, coverData = null) {
 
-		if(DEBUG) console.log("process", taskId);
+		// if(DEBUG) console.log("process", taskId);
 
 		try {
 

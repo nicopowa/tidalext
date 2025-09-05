@@ -1,4 +1,3 @@
-import {browser, DEBUG} from "./common/vars.js";
 import {BasePopup} from "./common/pops.js";
 
 class TidalPopup extends BasePopup {

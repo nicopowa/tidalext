@@ -1,9 +1,12 @@
 # TidalExt
 
-Tidal downloader web extension  
+Tidal downloader  
 
 Based on [tidal-dl-ng](https://github.com/exislow/tidal-dl-ng)  
+
 Rewritten from scratch in vanilla Javascript and turned into a simple web extension.  
+
+[More info](https://nicopr.fr/goodvibes)  
 
 Looking for [QobuzExt](https://github.com/nicopowa/qobuzext) ?  
 
@@ -25,7 +28,7 @@ Looking for [QobuzExt](https://github.com/nicopowa/qobuzext) ?
 
 ## How to use
 
-- Open [Web Player](https://listen.tidal.com)
+- Open [Web Player](https://tidal.com)
 - Connect account
 - Navigate to album or release page
 - Click extension icon
@@ -40,13 +43,13 @@ Looking for [QobuzExt](https://github.com/nicopowa/qobuzext) ?
 - Wait for download order
 - Load files one by one
 - Inject metadata & cover
-- Downloads processed file
 
 ## Work in progress
 
-- Refresh page if no data is showing
+- [ToDo](notes.tidal.md)
+- [ToDo++](common/notes.md)
 - Check extensions page for errors
-- Press Alt+Q to reload extension
+- Press Alt+T to reload extension
 
 ## Permissions
 
