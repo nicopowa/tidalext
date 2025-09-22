@@ -1,4 +1,4 @@
-import {browser, DEBUG} from "./common/vars.js";
+import {browse, DEBUG} from "./common/vars.js";
 import { BaseOffscreenProcessor } from "./common/off.js";
 import { M4aProcessor } from "./proc.m4a.js";
 
@@ -218,7 +218,7 @@ class DashProcessor {
 
 	sendProgress(progress) {
 
-		browser.runtime
+		browse.runtime
 		.sendMessage({
 			type: "progress",
 			task: this.taskId, 

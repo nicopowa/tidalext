@@ -58,5 +58,15 @@
 # Requests
 
 [DeclarativeContent](https://developer.chrome.com/docs/extensions/reference/api/declarativeContent#type-RequestContentScript)  
-[WebRequest](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/webRequest)  
-[StreamFilter](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/webRequest/StreamFilter)(not available in chrome)  
+[WebRequest](https://developer.mozilla.org/docs/Mozilla/Add-ons/WebExtensions/API/webRequest)  
+[StreamFilter](https://developer.mozilla.org/docs/Mozilla/Add-ons/WebExtensions/API/webRequest/StreamFilter) (not available in chrome)  
+
+# Firefox
+
+[BrowserSpecificSettings](https://developer.mozilla.org/docs/Mozilla/Add-ons/WebExtensions/manifest.json/browser_specific_settings)  
+[WebExt](https://extensionworkshop.com/documentation/develop/web-ext-command-reference)  
+
+
+# Ideas
+
+- spotify is now lossless !

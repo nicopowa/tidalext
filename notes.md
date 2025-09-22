@@ -7,4 +7,3 @@
 - [ ] output clean flac files
 - [x] segments download memory usage
 - [ ] players not showing injected cover
-- [] wtf

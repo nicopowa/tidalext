@@ -1,7 +1,9 @@
-const browser = chrome;
+const browse = chrome || browser;
+const action = browse.browserAction || browse.action;
 const DEBUG = true;
 
 export {
-	browser,
+	browse,
+	action,
 	DEBUG
 };

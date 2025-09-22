@@ -1,11 +1,11 @@
-import {browser, DEBUG} from "./common/vars.js";
+import {browse, DEBUG} from "./common/vars.js";
 import {Backstage} from "./common/back.js";
 
 class TidalBackground extends Backstage {
 
 	constructor() {
 
-		super("offscreen.tidal.html");
+		super();
 
 		this.urlBase = "https://tidal.com/";
 		this.quality = "LOSSLESS";
@@ -244,10 +244,13 @@ class TidalBackground extends Backstage {
 
 	getCoverUrl(tabId, media) {
 
+		// 80 160 320 640 1280
+		const coverSize = 640;
+
 		return `https://resources.tidal.com/images/${(media?.album?.cover || media.cover).replaceAll(
 			"-",
 			"/"
-		)}/640x640.jpg`;
+		)}/${coverSize}x${coverSize}.jpg`;
 
 	}
 
@@ -280,14 +283,36 @@ class TidalBackground extends Backstage {
 	getMetaData(track, album) {
 
 		return {
+
 			"TITLE": this.trackTitle(track),
+			...(track.version && {
+				"VERSION": track.version
+			}),
 			"ARTIST": track.artists[0]?.name || album?.artists[0]?.name || "Unknown",
+			
 			"ALBUM": this.albumTitle(album),
-			"TRACKNUMBER": String(track.trackNumber || 1),
 			"ALBUMARTIST": album?.artists[0]?.name || "Unknown",
+
+			...(album.copyright && {
+				"COPYRIGHT": album.copyright
+			}),
+
 			"DATE": new Date(album?.releaseDate || 0)
 			.getFullYear(),
-			"TOTALTRACKS": String(album?.numberOfTracks || "")
+
+			"TRACKNUMBER": String(track.trackNumber || 1),
+			"TOTALTRACKS": String(album?.numberOfTracks || ""),
+		
+			// ISRC
+
+			// UPC
+
+			// URL
+
+			...(track.replayGain && {
+				"REPLAYGAIN_TRACK_GAIN": track.replayGain + " dB"
+			})
+
 		};
 	
 	}

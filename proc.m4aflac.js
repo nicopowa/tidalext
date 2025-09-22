@@ -1,4 +1,3 @@
-
 class FlacFromM4aProcessor {
 
 	constructor() {

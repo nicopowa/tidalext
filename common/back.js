@@ -1,8 +1,9 @@
-import { browser, DEBUG } from "./vars.js";
+import { browse, action, DEBUG } from "./vars.js";
+import { Offscreen } from "./out.js";
 
 class Backstage {
 
-	constructor(proc) {
+	constructor() {
 
 		this.downloadCovers = false;
 
@@ -16,22 +17,21 @@ class Backstage {
 		this.icon = new Icn();
 		this.quality = ""; // default quality
 
-		this.queue = new Queue(
-			this,
-			proc
-		);
+		this.off = new Offscreen();
+
+		this.queue = new Queue(this);
 
 		this.urlBase = ""; // service url
 		this.urlHost = this.manifest().host_permissions[0];
 		
 		[
-			[browser.runtime.onStartup, this.liftoff],
-			[browser.runtime.onInstalled, this.liftoff],
-			[browser.downloads.onChanged, this.downloadProgress],
-			[browser.commands.onCommand, this.handleCommand],
-			// [browser.tabs.onUpdated, this.onTabUpdate],
-			[browser.tabs.onRemoved, this.onTabRemove],
-			[browser.runtime.onMessage, this.handleMessage]
+			[browse.runtime.onStartup, this.liftoff],
+			[browse.runtime.onInstalled, this.liftoff],
+			[browse.downloads.onChanged, this.downloadProgress],
+			[browse.commands.onCommand, this.handleCommand],
+			// [browse.tabs.onUpdated, this.onTabUpdate],
+			[browse.tabs.onRemoved, this.onTabRemove],
+			[browse.runtime.onMessage, this.handleMessage]
 		].forEach(([api, cbk]) =>
 			api.addListener(cbk.bind(this)));
 	
@@ -48,7 +48,7 @@ class Backstage {
 
 	manifest() {
 
-		return browser.runtime.getManifest();
+		return browse.runtime.getManifest();
 
 	}
 
@@ -98,7 +98,7 @@ class Backstage {
 
 	heads(...matches) {
 
-		browser.webRequest.onBeforeSendHeaders.addListener(
+		browse.webRequest.onBeforeSendHeaders.addListener(
 			this.heading.bind(this),
 			{
 				urls: matches
@@ -122,7 +122,7 @@ class Backstage {
 				data
 			);
 
-		return browser.runtime.sendMessage({
+		return browse.runtime.sendMessage({
 			type: type,
 			...data
 		});
@@ -145,7 +145,7 @@ class Backstage {
 		switch(msg.type) {
 
 			case "process":
-				browser.runtime.sendMessage(msg);
+				browse.runtime.sendMessage(msg);
 				break;
 
 			case "complete":
@@ -190,7 +190,7 @@ class Backstage {
 	handleCommand(cmd) {
 
 		if(cmd === "reload")
-			browser.runtime.reload();
+			browse.runtime.reload();
 	
 	}
 
@@ -235,7 +235,7 @@ class Backstage {
 	async popped() {
 
 		return !!(
-			await browser.runtime.getContexts({
+			await browse.runtime.getContexts({
 				contextTypes: ["POPUP"]
 			})
 		).length;
@@ -259,18 +259,10 @@ class Backstage {
 
 				actv: tab?.active,
 				last: !!lst,
-
-				/*need: this.dat.auth
-					? "nope"
-					: !tab
-						? "open"
-						: !tab?.active
-							? "swap"
-							: "load",*/
 							
-				settings: await browser.storage.local.get([
+				settings: await browse.storage.local.get([
 					"quality"
-					// more settings
+					// ... more settings
 				]),
 
 				media: this.medias.get(tab?.id) || null
@@ -283,7 +275,7 @@ class Backstage {
 
 	newTab(url) {
 
-		return browser.tabs.create({
+		return browse.tabs.create({
 			url
 		});
 	
@@ -291,7 +283,7 @@ class Backstage {
 
 	async curTab() {
 
-		const [cur] = await browser.tabs.query({
+		const [cur] = await browse.tabs.query({
 			url: [this.urlHost],
 			active: true
 		});
@@ -302,7 +294,7 @@ class Backstage {
 
 	async lastTab() {
 
-		const [last] = await browser.tabs.query({
+		const [last] = await browse.tabs.query({
 			url: [this.urlHost],
 			lastFocusedWindow: true
 		});
@@ -313,7 +305,7 @@ class Backstage {
 
 	focusTab(tab) {
 
-		return browser.tabs.update(
+		return browse.tabs.update(
 			tab.id,
 			{
 				active: true
@@ -324,13 +316,13 @@ class Backstage {
 
 	reloadTab(tab) {
 
-		return browser.tabs.reload(tab.id);
+		return browse.tabs.reload(tab.id);
 	
 	}
 
 	async getSetting(key) {
 
-		return (await browser.storage.local.get(key))[key];
+		return (await browse.storage.local.get(key))[key];
 	
 	}
 
@@ -685,7 +677,7 @@ class Backstage {
 
 	async saveSettings(msg) {
 
-		await browser.storage.local.set(msg.settings);
+		await browse.storage.local.set(msg.settings);
 	
 	}
 
@@ -698,7 +690,7 @@ class Icn {
 		this.textColor = "#FFFFFF";
 		this.backColor = "#6b7280";
 
-		this.letter = browser.runtime
+		this.letter = browse.runtime
 		.getManifest()
 		.name.slice(
 			0,
@@ -842,7 +834,7 @@ class Icn {
 			this.y
 		);
 
-		browser.action.setIcon({
+		action.setIcon({
 			imageData: this.ctx.getImageData(
 				0,
 				0,
@@ -855,11 +847,11 @@ class Icn {
 
 	badge(text, back = "#226bc5") {
 
-		browser.action.setBadgeText({
+		action.setBadgeText({
 			text
 		});
 
-		browser.action.setBadgeBackgroundColor({
+		action.setBadgeBackgroundColor({
 			color: back
 		});
 	
@@ -871,12 +863,11 @@ class Queue {
 
 	/**
 	 * @param {Backstage} main
-	 * @param {string} proc
 	 */
-	constructor(main, proc) {
+	constructor(main) {
 
 		this.main = main;
-		this.proc = proc;
+		this.proc = "offscreen.html";
 		this.tasks = [];
 		this.current = null;
 		this.processing = false;
@@ -894,18 +885,14 @@ class Queue {
 
 	runProc() {
 
-		return browser.offscreen.createDocument({
-			url: this.proc,
-			reasons: ["BLOBS"],
-			justification: "processing"
-		});
-	
+		return this.main.off.ensure(this.proc);
+
 	}
 
 	endProc() {
 
-		return browser.offscreen.closeDocument();
-	
+		return this.main.off.close();
+
 	}
 
 	async process() {
@@ -964,16 +951,15 @@ class Queue {
 
 	startDownload(dat, task) {
 
-		this.main.send(
-			"process",
-			{
-				id: task.id,
-				dat: dat,
-				metadata: task.meta,
-				cover: task.cover
-			}
-		);
-	
+		// instead of browse.runtime.sendMessage(...):
+		this.main.off.post({
+			type: "process",
+			id: task.id,
+			dat: dat,
+			metadata: task.meta,
+			cover: task.cover
+		});
+
 	}
 
 	async handleStreamComplete(msg) {
@@ -983,7 +969,7 @@ class Queue {
 
 		if(msg.ok) {
 
-			const downloadId = await browser.downloads.download({
+			const downloadId = await browse.downloads.download({
 				url: msg.url,
 				filename: this.current.file,
 				conflictAction: "overwrite"
@@ -998,7 +984,7 @@ class Queue {
 
 				if(this.main.downloadCovers) {
 
-					const downloadCoverId = await browser.downloads.download({
+					const downloadCoverId = await browse.downloads.download({
 						url: msg.cvr,
 						filename: [...this.current.file.split("/")
 						.slice(
@@ -1018,10 +1004,10 @@ class Queue {
 			}
 			else {
 
-				if(browser.runtime.lastError) {
+				if(browse.runtime.lastError) {
 
 					this.current.status = "error";
-					this.current.error = browser.runtime.lastError.message;
+					this.current.error = browse.runtime.lastError.message;
 				
 				}
 			
@@ -1053,5 +1039,5 @@ class Queue {
 }
 
 export {
-	DEBUG, Backstage
+	Backstage
 };

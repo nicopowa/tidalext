@@ -1,4 +1,4 @@
-import {browser, DEBUG} from "./vars.js";
+import {browse, DEBUG} from "./vars.js";
 
 class BasePopup {
 
@@ -20,7 +20,7 @@ class BasePopup {
 				this.save()
 		);
 
-		browser.runtime.onMessage.addListener(this.handleMessage.bind(this));
+		browse.runtime.onMessage.addListener(this.handleMessage.bind(this));
 
 		this.send("popup");
 
@@ -273,7 +273,7 @@ class BasePopup {
 				type
 			);
 
-		browser.runtime.sendMessage({
+		browse.runtime.sendMessage({
 			type: type,
 			...data
 		});

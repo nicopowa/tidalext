@@ -18,13 +18,51 @@ Looking for [QobuzExt](https://github.com/nicopowa/qobuzext) ?
 
 ## How to install
 
-- Download or clone repository
+Clone repository, or download & extract archive.  
+
+### Chromium based browsers
+
 - Open Extensions tab
-- Enable "Developer mode"
-- Click "Load unpacked"
+- Enable **Developer mode**
+- Click **Load unpacked**
 - Select extension directory
 - Click toolbar extensions icon
 - Pin extension
+
+### Firefox
+
+QobuzExt is not published on AMO (addons.mozilla.org).  
+Unsigned extensions can not be permanently installed on standard Firefox release.  
+
+#### Build extension
+
+- Delete `manifest.json`
+- Rename `manifest.firefox.json` to `manifest.json`
+- Open terminal in extension directory
+- Run this command :  
+	`tar -a -c -f tidalext.zip manifest.json *.html *.js common`
+
+#### Load extension temporarily (standard Firefox)
+
+- Type `about:debugging#/runtime/this-firefox` into the address bar and press Enter
+- Click **Load Temporary Add-on**
+- Select `tidalext.zip`
+
+#### Use a different Firefox edition
+
+- Install Firefox [Developer](https://firefox.com/download/all/desktop-developer/) or [Nightly](https://firefox.com/download/all/desktop-nightly/)
+- Type `about:config` into the address bar and press Enter
+- Accept the warning message
+- Search for `xpinstall.signatures.required`
+- Click the toggle button to set its value to **false**
+- Type `about:addons` into the address bar and press Enter
+- Click the cog button, then **Install Add-on From File**
+- Select `tidalext.zip`
+
+
+#### Note
+
+Firefox does not support [Offscreen API](https://developer.chrome.com/docs/extensions/reference/api/offscreen), extension automatically falls back to [hidden tabs](https://developer.mozilla.org/docs/Mozilla/Add-ons/WebExtensions/API/tabs/hide).
 
 ## How to use
 
@@ -32,6 +70,7 @@ Looking for [QobuzExt](https://github.com/nicopowa/qobuzext) ?
 - Connect account
 - Navigate to album or release page
 - Click extension icon
+
 
 ## How it works
 
@@ -44,19 +83,23 @@ Looking for [QobuzExt](https://github.com/nicopowa/qobuzext) ?
 - Load files one by one
 - Inject metadata & cover
 
+
 ## Work in progress
 
-- [ToDo](notes.tidal.md)
+- [ToDo](notes.md)
 - [ToDo++](common/notes.md)
 - Check extensions page for errors
 - Press Alt+T to reload extension
+
 
 ## Permissions
 
 - [storage](https://developer.chrome.com/docs/extensions/reference/api/storage) : save settings
 - [downloads](https://developer.chrome.com/docs/extensions/reference/api/downloads) : download files
 - [webRequest](https://developer.chrome.com/docs/extensions/reference/api/webRequest) : watch network
-- [offscreen](https://developer.chrome.com/docs/extensions/reference/api/offscreen) : process audio
+- [offscreen](https://developer.chrome.com/docs/extensions/reference/api/offscreen) : process audio (Chromium)
+- [tabHide](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/tabs/hide) : offscreen fallback (Firefox)
+
 
 ## Disclaimer
 

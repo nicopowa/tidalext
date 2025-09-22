@@ -1,4 +1,4 @@
-import {browser, DEBUG} from "./vars.js";
+import {browse, DEBUG} from "./vars.js";
 
 class BaseOffscreenProcessor {
 
@@ -7,7 +7,7 @@ class BaseOffscreenProcessor {
 		this.blobs = new Map();
 		this.covrs = new Map();
 		
-		browser.runtime.onMessage.addListener(this.handleMessage.bind(this));
+		browse.runtime.onMessage.addListener(this.handleMessage.bind(this));
 	
 	}
 
@@ -61,7 +61,7 @@ class BaseOffscreenProcessor {
 						
 			);
 
-			browser.runtime.sendMessage({
+			browse.runtime.sendMessage({
 				type: "complete",
 				ok: true,
 				id: msg.id,
@@ -79,7 +79,7 @@ class BaseOffscreenProcessor {
 
 			// sendMessage "error"
 		
-			browser.runtime.sendMessage({
+			browse.runtime.sendMessage({
 				type: "complete",
 				ok: false,
 				id: msg.id,

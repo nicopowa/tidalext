@@ -9,10 +9,10 @@
 		"default_popup": "popup.html",
 		"default_title": "TidalExt"
 	},
-	"permissions": ["storage", "downloads", "webRequest", "offscreen"],
+	"permissions": ["storage", "downloads", "webRequest", "tabHide"],
 	"host_permissions": ["https://*.tidal.com/*"],
 	"background": {
-		"service_worker": "background.js",
+		"scripts": ["background.js"],
 		"type": "module"
 	},
 	"content_scripts": [
@@ -32,9 +32,17 @@
 	"commands": {
 		"reload": {
 			"suggested_key": {
-				"default": "Alt+T"
+				"default": "Alt+Q"
 			},
 			"description": "reload"
+		}
+	},
+	"browser_specific_settings": {
+		"gecko": {
+			"id": "@TidalExt",
+			"data_collection_permissions": {
+				"required": ["none"]
+			}
 		}
 	}
 }
