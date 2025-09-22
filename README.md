@@ -31,7 +31,7 @@ Clone repository, or download & extract archive.
 
 ### Firefox
 
-QobuzExt is not published on AMO (addons.mozilla.org).  
+TidalExt is not published on AMO (addons.mozilla.org).  
 Unsigned extensions can not be permanently installed on standard Firefox release.  
 
 #### Build extension

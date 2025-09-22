@@ -57,18 +57,20 @@ class Backstage {
 		if(DEBUG)
 			console.log("update check");
 
-		fetch(this.manifest().homepage_url.replace(
+		const manurl = this.manifest().homepage_url.replace(
 			"github.com",
 			"raw.githubusercontent.com"
-		) + "/refs/heads/main/manifest.json")
+		) + "/refs/heads/main/manifest.json" + "?t=" + Date.now();
+
+		fetch(manurl)
 		.then(res =>
 			res.json())
 		.then(man => {
 
-			if(parseFloat(man.version) > parseFloat(this.manifest().version)) {
+			if(+man.version > +this.manifest().version) {
 
 				if(DEBUG)
-					console.log("update available");
+					console.log("update");
 
 				this.dat.next = true;
 			
@@ -76,9 +78,8 @@ class Backstage {
 		
 		})
 		.catch(() => {
-
-			// silent fail
-			console.log("update fail");
+			
+			console.error("update fail"); // silent fail
 			// this.handleError({ error: err });
 		
 		});
