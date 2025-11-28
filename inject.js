@@ -1,6 +1,7 @@
 (() => {
 
 	const urls = [
+		"/v1/country",
 		"/pages/album",
 		"/v2/artist/"
 	];

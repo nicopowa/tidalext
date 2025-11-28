@@ -29,7 +29,7 @@ class Backstage {
 			[browse.runtime.onInstalled, this.liftoff],
 			[browse.downloads.onChanged, this.downloadProgress],
 			[browse.commands.onCommand, this.handleCommand],
-			// [browse.tabs.onUpdated, this.onTabUpdate],
+			[browse.tabs.onUpdated, this.onTabUpdate],
 			[browse.tabs.onRemoved, this.onTabRemove],
 			[browse.runtime.onMessage, this.handleMessage]
 		].forEach(([api, cbk]) =>
@@ -60,7 +60,8 @@ class Backstage {
 		const manurl = this.manifest().homepage_url.replace(
 			"github.com",
 			"raw.githubusercontent.com"
-		) + "/refs/heads/main/manifest.json" + "?t=" + Date.now();
+		) + "/refs/heads/main/manifest.json"
+		+ "?t=" + Date.now(); // useless ?
 
 		fetch(manurl)
 		.then(res =>
@@ -205,12 +206,16 @@ class Backstage {
 
 		if(info?.status === "loading") {
 			
-			console.log("loading");
+			if(DEBUG)
+				console.log("loading");
+
+			this.icon.reset();
 		
 		}
 		else if(info?.status === "complete") {
 
-			console.log("complete");
+			if(DEBUG)
+				console.log("complete");
 		
 		}
 	
@@ -245,8 +250,11 @@ class Backstage {
 
 	async syncPopup() {
 
+		// no need check ?
 		if(!(await this.popped()))
 			return;
+
+		this.icon.reset();
 
 		const cur = await this.curTab();
 		const lst = await this.lastTab();
@@ -437,6 +445,37 @@ class Backstage {
 					));
 			
 			}
+			else if(mediaType === "release") {
+
+				const releaseInfos = await this.getReleaseInfos(mediaId);
+
+				//console.log(releaseInfos);
+
+				const coverBlob = await this.getCover(
+					this.getCoverUrl(
+						0,
+						releaseInfos
+					)
+				);
+
+				//console.log(coverBlob);
+
+				const trackList = this.trackList(
+					0,
+					releaseInfos
+				);
+
+				//console.log(trackList);
+
+				trackList.forEach(track =>
+					this.trackDownload(
+						track,
+						releaseInfos,
+						quality,
+						coverBlob
+					));
+
+			}
 			else if(mediaType === "playlist") {
 
 				/*const coverBlob = await this.getCover(
@@ -527,7 +566,8 @@ class Backstage {
 
 	mediaHint() {
 
-		this.icon.temp("#226bc5");
+		//this.icon.temp("#226bc5");
+		this.icon.back("#226bc5");
 	
 	}
 
@@ -549,6 +589,11 @@ class Backstage {
 		
 		}
 	
+	}
+
+	async getReleaseInfos(releaseId) {
+		// api request
+		// from child classes
 	}
 
 	async getCover(coverUrl) {
@@ -617,7 +662,7 @@ class Backstage {
 	
 	}
 
-	trackList(tabId) {
+	trackList(tabId, media) {
 
 		// child classes
 		return [];
@@ -689,7 +734,7 @@ class Icn {
 	constructor() {
 
 		this.textColor = "#FFFFFF";
-		this.backColor = "#6b7280";
+		this.backColor = "#6B7280";
 
 		this.letter = browse.runtime
 		.getManifest()
@@ -701,13 +746,13 @@ class Icn {
 
 		this.size = 64;
 
-		this.fade = "ae";
+		this.fade = "AE";
 
 		this.timed = null;
 
 		this.progressPercent = null;
 		this.progressHeight = 5;
-		this.progressColor = "#62b9ff";
+		this.progressColor = "#62B9FF";
 
 		this.icon = new OffscreenCanvas(
 			this.size,
@@ -742,7 +787,7 @@ class Icn {
 	reset() {
 
 		this.textColor = "#FFFFFF";
-		this.backColor = "#6b7280";
+		this.backColor = "#6B7280";
 		this.progressPercent = null;
 
 		this.render();
@@ -846,7 +891,7 @@ class Icn {
 	
 	}
 
-	badge(text, back = "#226bc5") {
+	badge(text, back = "#226BC5") {
 
 		action.setBadgeText({
 			text

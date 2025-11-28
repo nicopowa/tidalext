@@ -33,12 +33,14 @@ class TidalPopup extends BasePopup {
 
 	renderAlbum() {
 
+		const cover = this.media.cover.replaceAll(
+			"-",
+			"/"
+		);
+
 		this.elements.mediainfo.innerHTML = `
 				${this.showCovers ? `<div class="album-cover">
-					<img src="https://resources.tidal.com/images/${this.media.cover.replaceAll(
-		"-",
-		"/"
-	)}/640x640.jpg"/>
+					<img src="https://resources.tidal.com/images/${cover}/640x640.jpg"/>
 				</div>` : ""}
 				<div class="album-info">
 					<div class="album-title">${this.media.title}</div>
@@ -92,18 +94,28 @@ class TidalPopup extends BasePopup {
 			`;
 
 		this.elements.mediawrap.classList.remove(
-			"hidden"
+			"hide"
 		);
 
-		/*const releases = this.media.releases.flatMap(releaseType =>
-			releaseType.items);
-
-		// console.log(releases);
+		const releases = this.media.items.filter(item =>
+			["ARTIST_ALBUMS", "ARTIST_TOP_SINGLES"].includes(item.moduleId))
+		.map(item =>
+			item.items.map(idem =>
+				idem.data))
+		.flat();
 
 		this.elements.medialist.innerHTML = releases
 		.map(release =>
 			this.createReleaseItemHTML(release))
-		.join("");*/
+		.join("");
+
+		this.elements.media.querySelectorAll(".download-btn")
+		.forEach(btn =>
+			btn.addEventListener(
+				"click",
+				evt =>
+					this.downloadMedia(evt.target)
+			));
 
 	}
 
@@ -120,7 +132,7 @@ class TidalPopup extends BasePopup {
 					<div class="track-title">${track.title}${track.version ? ` (${track.version})` : ""}</div>
 					<div class="track-artist">${track.artists[0].name}</div>
 				</div>
-				<button class="track-download download-btn" data-type="track" data-id="${track.id}"></button>
+				<button class="track-download download-btn" data-type="track" data-id="${track.id}"${track.allowStreaming ? "" : " disabled"}></button>
 			</div>
 		`;
 	
@@ -131,14 +143,17 @@ class TidalPopup extends BasePopup {
 		return `
 			<div class="mediaitem">
 				${this.showCovers ? `<div class="release-cover">
-					<img src="${release.image.small}"/>
+					<img src="https://resources.tidal.com/images/${release.cover}/640x640.jpg"/>
 				</div>` : ""}
 				<div class="release-info">
-					<div class="release-title">${release.title}</div>
-					<div class="release-year">${new Date(release.dates.original)
-	.getFullYear()}</div>
+					<div class="release-title">${release.title}${release.version ? ` (${release.version})` : ""}</div>
+					<div class="release-data">
+						<div class="release-year">${new Date(release.releaseDate).getFullYear()}</div>
+						<div class="release-label" data-id="${0}">${release.copyright.replace(/\(c\)\s\d{4}\s/gi, "")}</div>
+					</div>
+					<div class="release-about">${release.type.toLowerCase()} - ${release.numberOfTracks} track${release.numberOfTracks !== 1 ? "s" : ""}</div>
 				</div>
-				<button class="release-download download-btn" data-type="release" data-id="${release.id}" disabled></button>
+				<button class="release-download download-btn" data-type="release" data-id="${release.id}" ${release.allowStreaming ? "" : " disabled"}></button>
 			</div>
 		`;
 	

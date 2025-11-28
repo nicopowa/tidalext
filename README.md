@@ -10,15 +10,18 @@ Rewritten from scratch in vanilla Javascript and turned into a simple web extens
 
 Looking for [QobuzExt](https://github.com/nicopowa/qobuzext) ?  
 
+
 ## Informations
 
 - First testing version
 - Chromium based browsers only
 - Active subscription required
 
+
 ## How to install
 
 Clone repository, or download & extract archive.  
+
 
 ### Chromium based browsers
 
@@ -29,10 +32,12 @@ Clone repository, or download & extract archive.
 - Click toolbar extensions icon
 - Pin extension
 
+
 ### Firefox
 
 TidalExt is not published on AMO (addons.mozilla.org).  
 Unsigned extensions can not be permanently installed on standard Firefox release.  
+
 
 #### Build extension
 
@@ -42,11 +47,13 @@ Unsigned extensions can not be permanently installed on standard Firefox release
 - Run this command :  
 	`tar -a -c -f tidalext.zip manifest.json *.html *.js common`
 
+
 #### Load extension temporarily (standard Firefox)
 
 - Type `about:debugging#/runtime/this-firefox` into the address bar and press Enter
 - Click **Load Temporary Add-on**
 - Select `tidalext.zip`
+
 
 #### Use a different Firefox edition
 
@@ -63,6 +70,7 @@ Unsigned extensions can not be permanently installed on standard Firefox release
 #### Note
 
 Firefox does not support [Offscreen API](https://developer.chrome.com/docs/extensions/reference/api/offscreen), extension automatically falls back to [hidden tabs](https://developer.mozilla.org/docs/Mozilla/Add-ons/WebExtensions/API/tabs/hide).
+
 
 ## How to use
 
@@ -99,6 +107,11 @@ Firefox does not support [Offscreen API](https://developer.chrome.com/docs/exten
 - [webRequest](https://developer.chrome.com/docs/extensions/reference/api/webRequest) : watch network
 - [offscreen](https://developer.chrome.com/docs/extensions/reference/api/offscreen) : process audio (Chromium)
 - [tabHide](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/tabs/hide) : offscreen fallback (Firefox)
+
+
+## Dependencies
+
+¯\\_(ツ)_/¯
 
 
 ## Disclaimer

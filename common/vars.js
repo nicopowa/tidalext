@@ -1,6 +1,6 @@
 const browse = chrome || browser;
 const action = browse.browserAction || browse.action;
-const DEBUG = true;
+const DEBUG = false;
 
 export {
 	browse,

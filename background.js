@@ -13,12 +13,14 @@ class TidalBackground extends Backstage {
 		this.dat = {
 			...this.dat,
 			clientId: "zU4XHVVkc2tDPo4t",
-			accessToken: ""
+			accessToken: "",
+			countryCode: "US"
 		};
 
 		this.heads("https://login.tidal.com/oauth2/*");
 
 		this.watch({
+			"/v1/country": this.handleCountry,
 			"/pages/album": this.handleAlbum,
 			"/v2/artist/": this.handleArtist
 		});
@@ -77,25 +79,21 @@ class TidalBackground extends Backstage {
 	
 	}
 
+	handleCountry(tab, dat) {
+
+		if(DEBUG)
+			console.log(
+				"COUNTRY",
+				dat
+			);
+
+		this.dat.countryCode = dat.countryCode || "US";
+
+	}
+
 	handleAlbum(tab, dat) {
 
-		const modules = dat.rows.map(row =>
-			row.modules?.[0]);
-
-		const albumInfos = modules.find(module =>
-			module.type === "ALBUM_HEADER")?.album;
-
-		const albumTracks = modules.find(module =>
-			module.type === "ALBUM_ITEMS")?.pagedList?.items.filter(item =>
-			item.type === "track")
-		.map(track =>
-			track.item);
-
-		dat = {
-			...albumInfos,
-			tracks: albumTracks,
-			extype: "album"
-		};
+		dat = this.parseAlbum(dat);
 
 		this.medias.set(
 			tab.id,
@@ -157,6 +155,8 @@ class TidalBackground extends Backstage {
 				dat
 			);
 
+		this.mediaHint();
+
 		this.syncPopup();
 
 	}
@@ -186,9 +186,58 @@ class TidalBackground extends Backstage {
 
 	}
 
-	trackList(tabId) {
+	parseAlbum(dat) {
 
-		return this.medias.get(tabId)?.tracks || [];
+		const modules = dat.rows.map(row =>
+			row.modules?.[0]);
+
+		const albumInfos = modules.find(module =>
+			module.type === "ALBUM_HEADER")?.album;
+
+		const albumTracks = modules.find(module =>
+			module.type === "ALBUM_ITEMS")?.pagedList?.items.filter(item =>
+			item.type === "track")
+		.map(track =>
+			track.item);
+
+		return {
+			...albumInfos,
+			tracks: albumTracks,
+			extype: "album"
+		};
+
+	}
+
+	async getReleaseInfos(releaseId) {
+
+		if(DEBUG)
+			console.log(
+				"get release infos",
+				releaseId
+			);
+
+		const releaseInfos = this.parseAlbum(await this.request(
+			"pages/album",
+			{
+				albumId: releaseId,
+				countryCode: this.dat.countryCode,
+				locale: navigator.language,
+				deviceType: "BROWSER"
+			}
+		));
+
+		//console.log(releaseInfos);
+
+		return releaseInfos;
+
+	}
+	
+	trackList(tabId, media) {
+
+		//return this.medias.get(tabId)?.tracks || [];
+		return ((media || this.medias.get(tabId))?.tracks || [])
+		.filter(track =>
+			track.allowStreaming);
 	
 	}
 
@@ -221,7 +270,7 @@ class TidalBackground extends Backstage {
 				playbackmode: "STREAM",
 				assetpresentation: "FULL",
 				audioquality: quality,
-				countryCode: "US"
+				countryCode: this.dat.countryCode // was "US"
 			}
 		);
 

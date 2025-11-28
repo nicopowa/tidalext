@@ -58,7 +58,7 @@ class BasePopup {
 
 		this.media = msg.media;
 
-		// console.log(this.media);
+		console.log(this.media);
 
 		this.setQuality(msg.settings.quality);
 
@@ -208,6 +208,13 @@ class BasePopup {
 
 		if(msg.next)
 			this.elements.musicext.classList.add("next");
+		else {
+
+			const man = browse.runtime.getManifest();
+
+			this.elements.musicext.querySelector("a").textContent = man.name + " " + man.version;
+		
+		}
 	
 	}
 
