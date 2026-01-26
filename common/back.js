@@ -5,7 +5,22 @@ class Backstage {
 
 	constructor() {
 
-		this.downloadCovers = false;
+		console.log(this.manifest.name);
+
+		[
+			[browse.runtime.onStartup, this.startup],
+			[browse.runtime.onInstalled, this.liftoff],
+			[browse.downloads.onChanged, this.downloadProgress],
+			[browse.commands.onCommand, this.handleCommand],
+			[browse.tabs.onUpdated, this.onTabUpdate],
+			[browse.tabs.onRemoved, this.onTabRemove],
+			[browse.runtime.onMessage, this.handleMessage]
+		].forEach(([api, cbk]) =>
+			api.addListener(cbk.bind(this)));
+
+		this.opt = {
+			downloadCovers: false
+		};
 
 		this.dat = {
 			auth: false,
@@ -22,31 +37,29 @@ class Backstage {
 		this.queue = new Queue(this);
 
 		this.urlBase = ""; // service url
-		this.urlHost = this.manifest().host_permissions[0];
-		
-		[
-			[browse.runtime.onStartup, this.liftoff],
-			[browse.runtime.onInstalled, this.liftoff],
-			[browse.downloads.onChanged, this.downloadProgress],
-			[browse.commands.onCommand, this.handleCommand],
-			[browse.tabs.onUpdated, this.onTabUpdate],
-			[browse.tabs.onRemoved, this.onTabRemove],
-			[browse.runtime.onMessage, this.handleMessage]
-		].forEach(([api, cbk]) =>
-			api.addListener(cbk.bind(this)));
+		this.urlHost = this.manifest.host_permissions[0];
 	
+	}
+
+	startup() {
+
+		if(DEBUG)
+			console.log("startup");
+
+		this.update();
+
 	}
 
 	liftoff() {
 
-		// if(DEBUG) console.log("lift off");
+		if(DEBUG)
+			console.log("lift off");
 		// browser startup || extension installed
 		// this.icon.back("#ff8c00");
-		this.update();
 	
 	}
 
-	manifest() {
+	get manifest() {
 
 		return browse.runtime.getManifest();
 
@@ -57,7 +70,7 @@ class Backstage {
 		if(DEBUG)
 			console.log("update check");
 
-		const manurl = this.manifest().homepage_url.replace(
+		const manurl = this.manifest.homepage_url.replace(
 			"github.com",
 			"raw.githubusercontent.com"
 		) + "/refs/heads/main/manifest.json"
@@ -68,7 +81,7 @@ class Backstage {
 			res.json())
 		.then(man => {
 
-			if(+man.version > +this.manifest().version) {
+			if(+man.version > +this.manifest.version) {
 
 				if(DEBUG)
 					console.log("update");
@@ -117,12 +130,7 @@ class Backstage {
 
 	send(type, data) {
 
-		if(DEBUG)
-			console.log(
-				"back >>",
-				type,
-				data
-			);
+		//if(DEBUG) console.log("back >>", type, data);
 
 		return browse.runtime.sendMessage({
 			type: type,
@@ -198,27 +206,61 @@ class Backstage {
 
 	onTabUpdate(tabId, info, tab) {
 
-		// blank tab
-		if(!tab.url)
+		if(!tab.url) // blank
 			return;
 
-		// console.log("up", tab, info);
+		//console.log("up", tab, info?.status, info);
 
-		if(info?.status === "loading") {
-			
-			if(DEBUG)
-				console.log("loading");
-
-			this.icon.reset();
-		
-		}
-		else if(info?.status === "complete") {
-
-			if(DEBUG)
-				console.log("complete");
-		
-		}
+		if(info?.url)
+			this.onTabNavigate(
+				tab,
+				info
+			);
+		else if(info?.status === "loading")
+			this.onTabLoading(
+				tab,
+				info
+			);
+		else if(info?.status === "complete")
+			this.onTabComplete(
+				tab,
+				info
+			);
 	
+	}
+
+	onTabNavigate(tab, info) {
+
+		if(DEBUG)
+			console.log(
+				"navigate",
+				tab.id,
+				info.url
+			);
+	
+	}
+
+	onTabLoading(tab, info) {
+
+		if(DEBUG)
+			console.log(
+				"loading",
+				tab.id
+			);
+
+		// injected code parses before tab update event
+		//this.icon.reset();
+	
+	}
+
+	onTabComplete(tab, info) {
+
+		if(DEBUG)
+			console.log(
+				"complete",
+				tab.id
+			);
+
 	}
 
 	onTabRemove(tabId, info) {
@@ -391,17 +433,20 @@ class Backstage {
 			
 			}
 
+			const mediaData = this.medias.get(tab.id);
+
 			if(DEBUG)
 				console.log(
 					"download",
 					mediaType,
 					mediaId,
+					mediaData,
 					quality
 				);
 
 			if(mediaType === "track") {
 
-				const track = this.trackList(tab.id)
+				const track = this.trackList(mediaData)
 				.find(
 					trk =>
 						trk.id === +mediaId
@@ -409,18 +454,10 @@ class Backstage {
 
 				if(track) {
 
-					const coverBlob = await this.getCover(
-						this.getCoverUrl(
-							tab.id,
-							track
-						)
-					);
-
 					this.trackDownload(
 						track,
-						this.medias.get(tab.id),
 						quality,
-						coverBlob
+						mediaData.extype === "album" ? mediaData : null
 					);
 				
 				}
@@ -428,70 +465,54 @@ class Backstage {
 			}
 			else if(mediaType === "album") {
 
-				const coverBlob = await this.getCover(
-					this.getCoverUrl(
-						tab.id,
-						this.medias.get(tab.id)
-					)
-				);
+				const album = await this.getRelease(mediaId);
 
-				this.trackList(tab.id)
+				const coverBlob = await this.getCover(this.getCoverUrl(album));
+
+				this.trackList(mediaData)
 				.forEach(track =>
 					this.trackDownload(
 						track,
-						this.medias.get(tab.id),
 						quality,
+						album,
 						coverBlob
 					));
 			
 			}
+			// duplicated, same as album, merge both
 			else if(mediaType === "release") {
 
-				const releaseInfos = await this.getReleaseInfos(mediaId);
+				const releaseData = await this.getRelease(mediaId);
 
-				//console.log(releaseInfos);
+				const coverBlob = await this.getCover(this.getCoverUrl(releaseData));
 
-				const coverBlob = await this.getCover(
-					this.getCoverUrl(
-						0,
-						releaseInfos
-					)
-				);
-
-				//console.log(coverBlob);
-
-				const trackList = this.trackList(
-					0,
-					releaseInfos
-				);
-
-				//console.log(trackList);
+				const trackList = this.trackList(releaseData);
 
 				trackList.forEach(track =>
 					this.trackDownload(
 						track,
-						releaseInfos,
 						quality,
+						releaseData,
 						coverBlob
 					));
 
 			}
 			else if(mediaType === "playlist") {
 
-				/*const coverBlob = await this.getCover(
-					this.getCoverUrl(this.media)
-				);
-
-				for(const track of this.media.tracks?.items || []) {
-
+				const trackList = this.trackList(mediaData);
+				
+				trackList.forEach((track, index) =>
 					this.trackDownload(
 						track,
-						this.media,
 						quality,
-						coverBlob
-					);
-				
-				}*/
+						null,
+						null,
+						{
+							list: true,
+							...this.playlistInfos(mediaData),
+							indx: index + 1
+						}
+					));
 			
 			}
 			else {
@@ -516,6 +537,8 @@ class Backstage {
 	async handleError(msg) {
 
 		console.error(msg?.error || msg || "error");
+
+		this.icon.text("#ef4444");
 
 		try {
 
@@ -553,6 +576,7 @@ class Backstage {
 				{
 					items: this.queue.tasks.map(t =>
 						({
+							// ...t // x)
 							id: t.id,
 							infos: t.infos,
 							progress: t.progress,
@@ -566,8 +590,8 @@ class Backstage {
 
 	mediaHint() {
 
-		//this.icon.temp("#226bc5");
-		this.icon.back("#226bc5");
+		//this.icon.temp("#3b89f6");
+		this.icon.back("#3b89f6");
 	
 	}
 
@@ -591,9 +615,8 @@ class Backstage {
 	
 	}
 
-	async getReleaseInfos(releaseId) {
-		// api request
-		// from child classes
+	async getRelease(releaseId) {
+		// api calls from child classes
 	}
 
 	async getCover(coverUrl) {
@@ -609,26 +632,17 @@ class Backstage {
 	
 	}
 
-	getTrackInfos(track, album) {
-		// child classes
-	}
-
 	getTrackUrl(track, quality) {
 
-		if(DEBUG)
-			console.log(
-				"track url",
-				track,
-				quality
-			);
+		//if(DEBUG) console.log("track url", track, quality);
 	
 	}
 
-	getCoverUrl(tabId, media) {
+	getCoverUrl(media) {
 		// child classes
 	}
 
-	getFilePath(track, album) {
+	getFilePath(track, album, rules) {
 		// child classes
 	}
 
@@ -636,42 +650,53 @@ class Backstage {
 		// child classes
 	}
 
-	trackDownload(track, album, quality, cover = null) {
+	trackDownload(track, quality, album = null, cover = null, rules = null) {
 
 		this.queue.add({
 			id: `${track.id}_${Date.now()}`,
 			track: track,
+			infos: this.getTrackInfos(track),
 			quality: quality,
 			status: "wait",
 			progress: 0,
-			infos: this.getTrackInfos(
-				track,
-				album
-			),
-			file: this.getFilePath(
-				track,
-				album
-			),
-			meta: this.getMetaData(
-				track,
-				album
-			),
+			album: album,
+			file: null,
+			meta: null,
 			cover: cover,
+			rules: rules,
 			error: null
 		});
 	
 	}
 
-	trackList(tabId, media) {
+	trackList(media) {
 
 		// child classes
 		return [];
 	
 	}
 
+	playlistInfos(list) {
+
+		// child classes
+		return {};
+	
+	}
+
+	getTrackInfos(track) {
+
+		// child classes
+		return {};
+	
+	}
+
 	trackTitle(track) {
 
-		return `${track.title}${track.version ? ` (${track.version})` : ""}`;
+		return `${track.title}${track.version ? ` (${track.version})` : ""}`
+		.replaceAll(
+			"/",
+			"-"
+		);
 	
 	}
 
@@ -682,6 +707,34 @@ class Backstage {
 	}
 
 	sanitize(name) {
+
+		return name
+		// win backslash to forward
+		.replace(
+			/\\/g,
+			"/"
+		)
+		// remove illegal chars          
+		.replace(
+			/[<>:"|?*\x00-\x1F]/g,
+			""
+		)
+		// remove dots/spaces at end of folder/file names
+		.replace(
+			/[. ]+([\/]|$)/g,
+			"$1"
+		)
+		// remove leading slash (fixes "drive root" error)
+		.replace(
+			/^\//,
+			""
+		)
+		// replace multiple spaces by single space
+		.replace(
+			/\s+/g,
+			" "
+		)
+		.trim();
 
 		return name
 		.replace(
@@ -706,7 +759,8 @@ class Backstage {
 
 				this.icon.reset();
 
-				await this.send(
+				//await
+				this.send(
 					"clear",
 					{
 						id: this.queue.blobs.get(delta.id)
@@ -754,6 +808,8 @@ class Icn {
 		this.progressHeight = 5;
 		this.progressColor = "#62B9FF";
 
+		this.rect = [0, 0, this.size, this.size];
+
 		this.icon = new OffscreenCanvas(
 			this.size,
 			this.size
@@ -774,11 +830,7 @@ class Icn {
 		const metrics = this.ctx.measureText(this.letter);
 
 		this.x = this.size / 2;
-		this.y
-			= this.size / 2
-			+ (metrics.actualBoundingBoxAscent
-				- metrics.actualBoundingBoxDescent)
-				/ 2;
+		this.y = this.size / 2 + (metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2;
 
 		this.reset();
 	
@@ -840,21 +892,11 @@ class Icn {
 
 	render() {
 
-		this.ctx.clearRect(
-			0,
-			0,
-			this.size,
-			this.size
-		);
+		this.ctx.clearRect(...this.rect);
 
 		this.ctx.fillStyle = this.backColor;
 
-		this.ctx.fillRect(
-			0,
-			0,
-			this.size,
-			this.size
-		);
+		this.ctx.fillRect(...this.rect);
 
 		if(this.progressPercent !== null) {
 
@@ -881,17 +923,12 @@ class Icn {
 		);
 
 		action.setIcon({
-			imageData: this.ctx.getImageData(
-				0,
-				0,
-				this.size,
-				this.size
-			)
+			imageData: this.ctx.getImageData(...this.rect)
 		});
 	
 	}
 
-	badge(text, back = "#226BC5") {
+	badge(text, back = "#3b89f6") {
 
 		action.setBadgeText({
 			text
@@ -978,18 +1015,33 @@ class Queue {
 
 	async downloadTask(task) {
 
-		console.log(
-			"task",
-			task
+		if(DEBUG)
+			console.log(
+				"task",
+				task
+			);
+
+		if(!task.album)
+			task.album = await this.main.getRelease(task.track.album.id);
+
+		task.file = this.main.getFilePath(
+			task.track,
+			task.album,
+			task.rules
+		);
+		task.meta = this.main.getMetaData(
+			task.track,
+			task.album
 		);
 
-		const trackData = await this.main.getTrackUrl(
-			task.track,
-			task.quality
-		);
+		if(!task.cover)
+			task.cover = await this.main.getCover(this.main.getCoverUrl(task.album));
 
 		this.startDownload(
-			trackData,
+			await this.main.getTrackUrl(
+				task.track,
+				task.quality
+			),
 			task
 		);
 	
@@ -997,7 +1049,12 @@ class Queue {
 
 	startDownload(dat, task) {
 
-		// instead of browse.runtime.sendMessage(...):
+		console.log(
+			"start download",
+			dat,
+			task
+		);
+
 		this.main.off.post({
 			type: "process",
 			id: task.id,
@@ -1028,7 +1085,7 @@ class Queue {
 					this.current.id
 				);
 
-				if(this.main.downloadCovers) {
+				if(this.main.opt.downloadCovers) {
 
 					const downloadCoverId = await browse.downloads.download({
 						url: msg.cvr,
@@ -1077,7 +1134,7 @@ class Queue {
 				this.processNext();
 			
 			},
-			345
+			234
 		);
 	
 	}

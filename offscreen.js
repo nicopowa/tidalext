@@ -37,7 +37,7 @@ class DashProcessor {
 				new Blob(
 					[processed],
 					{
-						type: "audio/mp4"
+						type: "audio/flac"
 					}
 				)
 			);

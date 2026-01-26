@@ -6,7 +6,7 @@ Based on [tidal-dl-ng](https://github.com/exislow/tidal-dl-ng)
 
 Rewritten from scratch in vanilla Javascript and turned into a simple web extension.  
 
-[More info](https://nicopr.fr/goodvibes)  
+[Infos & Changelog](https://nicopr.fr/goodvibes)  
 
 Looking for [QobuzExt](https://github.com/nicopowa/qobuzext) ?  
 
@@ -14,7 +14,6 @@ Looking for [QobuzExt](https://github.com/nicopowa/qobuzext) ?
 ## Informations
 
 - First testing version
-- Chromium based browsers only
 - Active subscription required
 
 
@@ -67,16 +66,23 @@ Unsigned extensions can not be permanently installed on standard Firefox release
 - Select `tidalext.zip`
 
 
-#### Note
+## Notes
 
-Firefox does not support [Offscreen API](https://developer.chrome.com/docs/extensions/reference/api/offscreen), extension automatically falls back to [hidden tabs](https://developer.mozilla.org/docs/Mozilla/Add-ons/WebExtensions/API/tabs/hide).
+- Massive glitch on Edge Windows 11 : extension becomes unresponsive, popup not showing, broken keyboard shortcut, extension takes forever to reload 
+
+- Firefox does not support [Offscreen API](https://developer.chrome.com/docs/extensions/reference/api/offscreen), extension automatically falls back to [hidden tabs](https://developer.mozilla.org/docs/Mozilla/Add-ons/WebExtensions/API/tabs/hide).  
+
+- AI was used for FLAC conversion (M4aProcessor class).  
+
+- Tidal default settings do not provide complete metadata.  
+Enable "Audio metadata" in [Settings](https://tidal.com/settings) > Display
 
 
 ## How to use
 
 - Open [Web Player](https://tidal.com)
 - Connect account
-- Navigate to album or release page
+- Navigate to album or artist page
 - Click extension icon
 
 
@@ -94,10 +100,10 @@ Firefox does not support [Offscreen API](https://developer.chrome.com/docs/exten
 
 ## Work in progress
 
-- [ToDo](notes.md)
-- [ToDo++](common/notes.md)
 - Check extensions page for errors
 - Press Alt+T to reload extension
+- [ToDo](notes.md)
+- [ToDo++](common/TODO.md)
 
 
 ## Permissions

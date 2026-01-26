@@ -221,6 +221,7 @@ a {
 .album-info,
 .artist-info,
 .release-info,
+.label-info,
 .playlist-info,
 .track-info {
 	display: flex;
@@ -238,6 +239,7 @@ a {
 
 .album-title,
 .artist-name,
+.label-name,
 .playlist-name,
 .release-title,
 .track-title {
@@ -297,6 +299,9 @@ a {
 	display: inline;
 	color: var(--text);
 	font-size: 11px;
+	overflow: hidden;
+    white-space: pre;
+    text-overflow: ellipsis;
 }
 
 .download-btn {
@@ -413,7 +418,6 @@ a {
 .queued {
 	min-width: 32px;
 	text-align: center;
-	/* padding: 1px 2px 1px 2px; */
 	font-size: 11px;
 	text-transform: uppercase;
 	white-space: nowrap;
@@ -421,20 +425,19 @@ a {
 }
 
 .queued.wait {
-	color: #6b7280;
+	color: var(--test);
 }
 
 .queued.load {
-	color: #256ad9;
+	color: var(--text);
 }
 
 .queued.ok {
-	/* color: rgb(42, 140, 78); */
-	color: #256ad9;
+	color: var(--info);
 }
 
 .queued.fail {
-	color: #a52121;
+	color: var(--error);
 }
 
 .queue-progress {

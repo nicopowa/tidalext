@@ -96,7 +96,9 @@ class BasePopup {
 				case "releases":
 					this.renderReleases();
 					break;
-				// case "label":
+				case "label":
+					this.renderLabel();
+					break;
 				case "playlist":
 					this.renderPlaylist();
 					break;
@@ -122,6 +124,10 @@ class BasePopup {
 
 	renderReleases() {
 
+	}
+
+	renderLabel() {
+		
 	}
 
 	renderPlaylist() {
@@ -160,6 +166,7 @@ class BasePopup {
 
 	createQueueItemHTML(item) {
 
+		// eew
 		return `
 			<div class="queue-item" data-task="${item.id}">
 				<div class="queue-info">

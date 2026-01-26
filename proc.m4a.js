@@ -1,550 +1,580 @@
+const FLAC_SIGNATURE = 0x664C6143; // fLaC
+
+// mp4 atoms
+const MOOV = 0x6D6F6F76;
+const MDAT = 0x6D646174;
+const MOOF = 0x6D6F6F66;
+const STYP = 0x73747970;
+const FTYP = 0x66747970;
+const DFLA = 0x64664C61;
+
 class M4aProcessor {
 
 	constructor() {
 
-		this.FTYP = 0x66747970;
-		this.MOOV = 0x6D6F6F76;
-		this.UDTA = 0x75647461;
-		this.META = 0x6D657461;
-		this.ILST = 0x696C7374;
-		this.DATA = 0x64617461;
-		this.HDLR = 0x68646C72;
-		
-		this.UTF8_TYPE = 1;
-		this.JPEG_TYPE = 13;
-		this.PNG_TYPE = 14;
-		
-		this.TAG_MAP = {
-			"TITLE": 0xa96E616D,
-			"ARTIST": 0xa9415254,
-			"ALBUM": 0xa9616C62,
-			"DATE": 0xa9646179,
-			"TRACK": 0x74726B6E,
-			"ALBUMARTIST": 0x61415254,
-			"YEAR": 0xa9646179,
-			"COVR": 0x636F7672
-		};
-		
 		this.encoder = new TextEncoder();
-		this.hdlrCache = null;
+		this.TAG_MAP = {
+			"TRACK": "TRACKNUMBER",
+			"YEAR": "DATE",
+			"COMMENTS": "DESCRIPTION"
+		};
 	
 	}
 
-	async injectMetadata(buffer, metadata, coverData = null) {
+	/**
+     * @param {Uint8Array} buffer : dash segments init + media
+     * @param {Object} metadata : tags
+     * @param {Object} coverData : cover
+     */
+	async injectMetadata(buffer, metadata, coverData) {
 
-		const atoms = this.parseAtoms(buffer);
-		const moovIndex = atoms.findIndex(a =>
-			a.type === this.MOOV);
+		const {
+			streamInfo, audioChunks, totalAudioLength
+		} = this.parseMp4Container(buffer);
+
+		if(!streamInfo) {
+
+			// fallback
+			if(this.isRawFlac(buffer)) {
+
+				return this.rebuildRawFlac(
+					buffer,
+					metadata,
+					coverData
+				);
+			
+			}
+
+			throw new Error("could not find FLAC streamInfo in mp4 container");
 		
-		if(moovIndex === -1)
-			throw new Error("no moov atom");
+		}
 
-		atoms[moovIndex] = await this.updateMoovMetadata(
-			atoms[moovIndex],
+		return this.buildFlac(
+			streamInfo,
+			audioChunks,
+			totalAudioLength,
 			metadata,
 			coverData
 		);
-
-		return this.buildM4AFile(atoms);
 	
 	}
 
-	parseAtoms(buffer) {
+	isRawFlac(buffer) {
 
-		const atoms = [];
+		if(buffer.length < 4)
+			return false;
+
 		const view = new DataView(
 			buffer.buffer,
-			buffer.byteOffset
+			buffer.byteOffset,
+			buffer.byteLength
 		);
-		let pos = 0;
 
-		while(pos + 8 <= buffer.length) {
+		return view.getUint32(
+			0,
+			false
+		) === FLAC_SIGNATURE;
+	
+	}
 
-			let atomSize = view.getUint32(
-				pos,
+	parseMp4Container(buffer) {
+
+		const view = new DataView(
+			buffer.buffer,
+			buffer.byteOffset,
+			buffer.byteLength
+		);
+		const len = buffer.length;
+        
+		let streamInfo = null;
+		let audioChunks = [];
+		let totalAudioLength = 0;
+
+		let i = 0;
+        
+		while(i < len - 8) {
+
+			// filter MOOV and MDAT, start with 0x6D
+			if(buffer[i] !== 0x6D) {
+
+				i++;
+				continue;
+			
+			}
+
+			const type = view.getUint32(
+				i,
 				false
 			);
-			const atomType = view.getUint32(
-				pos + 4,
+            
+			if(type !== MOOV && type !== MDAT) {
+
+				i++;
+				continue;
+			
+			}
+
+			// atom header starts 4 bytes before type (size field)
+			const atomStart = i - 4;
+            
+			// check start of file
+			if(atomStart < 0) {
+ 
+				i++;
+				continue;
+			
+			}
+
+			let size = view.getUint32(
+				atomStart,
 				false
 			);
 			let headerSize = 8;
+            
+			// handle extended size 64-bit
+			if(size === 1) {
 
-			if(atomSize === 1) {
-
-				if(pos + 16 > buffer.length)
+				if(atomStart + 16 > len)
 					break;
 
-				atomSize = view.getUint32(
-					pos + 12,
+				size = Number(view.getBigUint64(
+					atomStart + 8,
 					false
-				);
+				));
 				headerSize = 16;
 			
 			}
+			else if(size === 0) { // chunks until the end
 
-			if(atomSize === 0)
-				atomSize = buffer.length - pos;
+				let chunkEnd = len;
+                
+				for(let j = atomStart + headerSize; j < len - 4; j++) {
 
-			if(atomSize < headerSize || pos + atomSize > buffer.length)
-				break;
+					const b = buffer[j];
 
-			atoms.push({
-				type: atomType,
-				data: buffer.subarray(
-					pos,
-					pos + atomSize
-				)
-			});
+					// look for 'm' (moov/moof/mdat), 's' (styp), 'f' (ftyp) signatures
+					if(b === 0x6D || b === 0x73 || b === 0x66) {
 
-			pos += atomSize;
-		
-		}
+						const nextSig = view.getUint32(
+							j,
+							false
+						);
 
-		return atoms;
-	
-	}
+						if(nextSig === MOOF || nextSig === STYP || nextSig === FTYP || nextSig === MOOV || nextSig === MDAT) {
 
-	async updateMoovMetadata(moovAtom, metadata, coverData) {
-
-		const subAtoms = this.parseSubAtoms(
-			moovAtom.data,
-			8
-		);
-		let udtaIndex = subAtoms.findIndex(a =>
-			a.type === this.UDTA);
-		
-		if(udtaIndex >= 0) {
-
-			subAtoms[udtaIndex] = await this.updateUdtaMetadata(
-				subAtoms[udtaIndex],
-				metadata,
-				coverData
-			);
-		
-		}
-		else {
-
-			subAtoms.push(await this.createUdtaAtom(
-				metadata,
-				coverData
-			));
-		
-		}
-
-		return {
-			type: moovAtom.type,
-			data: this.buildAtom(
-				this.MOOV,
-				subAtoms
-			)
-		};
-	
-	}
-
-	parseSubAtoms(data, offset) {
-
-		const atoms = [];
-		const view = new DataView(
-			data.buffer,
-			data.byteOffset
-		);
-		let pos = offset;
-
-		while(pos + 8 <= data.length) {
-
-			const atomSize = view.getUint32(
-				pos,
-				false
-			);
-			const atomType = view.getUint32(
-				pos + 4,
-				false
-			);
+							chunkEnd = j - 4;
+							break;
+						
+						}
+					
+					}
+				
+				}
+				size = chunkEnd - atomStart;
 			
-			if(atomSize === 0 || pos + atomSize > data.length)
-				break;
+			}
 
-			atoms.push({
-				type: atomType,
-				data: data.subarray(
-					pos,
-					pos + atomSize
-				)
-			});
+			// atom sanity check
+			if(size >= headerSize && atomStart + size <= len + 1024) {
+                
+				if(type === MOOV) {
 
-			pos += atomSize;
-		
-		}
+					if(!streamInfo) {
 
-		return atoms;
-	
-	}
+						streamInfo = this.extractStreamInfoFromMoov(
+							buffer,
+							atomStart + headerSize,
+							atomStart + size
+						);
+					
+					}
+				
+				}
+				else { // MDAT
 
-	async updateUdtaMetadata(udtaAtom, metadata, coverData) {
+					// clamp buffer length
+					const readSize = Math.min(
+						size,
+						len - atomStart
+					);
+					const data = buffer.subarray(
+						atomStart + headerSize,
+						atomStart + readSize
+					);
+                    
+					if(data.length > 0) {
 
-		const subAtoms = this.parseSubAtoms(
-			udtaAtom.data,
-			8
-		);
-		let metaIndex = subAtoms.findIndex(a =>
-			a.type === this.META);
-		
-		if(metaIndex >= 0) {
+						audioChunks.push(data);
+						totalAudioLength += data.length;
+					
+					}
+				
+				}
 
-			subAtoms[metaIndex] = await this.createMetaAtom(
-				metadata,
-				coverData
-			);
-		
-		}
-		else {
-
-			subAtoms.push(await this.createMetaAtom(
-				metadata,
-				coverData
-			));
-		
-		}
-
-		return {
-			type: this.UDTA,
-			data: this.buildAtom(
-				this.UDTA,
-				subAtoms
-			)
-		};
-	
-	}
-
-	async createUdtaAtom(metadata, coverData) {
-
-		return {
-			type: this.UDTA,
-			data: this.buildAtom(
-				this.UDTA,
-				[await this.createMetaAtom(
-					metadata,
-					coverData
-				)]
-			)
-		};
-	
-	}
-
-	async createMetaAtom(metadata, coverData) {
-
-		const ilstData = await this.buildIlstAtom(
-			metadata,
-			coverData
-		);
-		const hdlrData = this.getHdlrAtom();
-		
-		const totalSize = 12 + hdlrData.length + ilstData.length;
-		const buffer = new Uint8Array(totalSize);
-		const view = new DataView(buffer.buffer);
-		
-		view.setUint32(
-			0,
-			totalSize,
-			false
-		);
-		view.setUint32(
-			4,
-			this.META,
-			false
-		);
-		view.setUint32(
-			8,
-			0,
-			false
-		);
-		
-		buffer.set(
-			hdlrData,
-			12
-		);
-		buffer.set(
-			ilstData,
-			12 + hdlrData.length
-		);
-
-		return {
-			type: this.META,
-			data: buffer
-		};
-	
-	}
-
-	getHdlrAtom() {
-
-		if(!this.hdlrCache) {
-
-			const size = 33;
-			const buffer = new Uint8Array(size);
-			const view = new DataView(buffer.buffer);
+				// jump end of the atom.
+				i = atomStart + size;
 			
-			view.setUint32(
-				0,
-				size,
-				false
-			);
-			view.setUint32(
-				4,
-				this.HDLR,
-				false
-			);
-			view.setUint32(
-				8,
-				0,
-				false
-			);
-			view.setUint32(
-				12,
-				0,
-				false
-			);
-			
-			buffer.set(
-				this.encoder.encode("mdir"),
-				16
-			);
-			
-			this.hdlrCache = buffer;
-		
-		}
+			}
+			else {
 
-		return this.hdlrCache;
-	
-	}
-
-	async buildIlstAtom(metadata, coverData) {
-
-		const tagBuffers = [];
-		let totalDataSize = 0;
-
-		for(const [tagName, value] of Object.entries(metadata)) {
-
-			const tagType = this.TAG_MAP[tagName.toUpperCase()];
-
-			if(tagType && value && tagType !== this.TAG_MAP.COVR) {
-
-				const tagBuffer = this.buildTextTag(
-					tagType,
-					String(value)
-				);
-
-				tagBuffers.push(tagBuffer);
-				totalDataSize += tagBuffer.length;
+				// invalid size or bounds, scan next byte
+				i++;
 			
 			}
 		
 		}
 
-		if(coverData) {
-
-			const coverBuffer = this.buildCoverTag(coverData);
-
-			tagBuffers.push(coverBuffer);
-			totalDataSize += coverBuffer.length;
-		
-		}
-
-		const totalSize = 8 + totalDataSize;
-		const buffer = new Uint8Array(totalSize);
-		const view = new DataView(buffer.buffer);
-		
-		view.setUint32(
-			0,
-			totalSize,
-			false
-		);
-		view.setUint32(
-			4,
-			this.ILST,
-			false
-		);
-
-		let pos = 8;
-
-		for(const tagBuffer of tagBuffers) {
-
-			buffer.set(
-				tagBuffer,
-				pos
-			);
-			pos += tagBuffer.length;
-		
-		}
-
-		return buffer;
+		return {
+			streamInfo, audioChunks, totalAudioLength
+		};
 	
 	}
 
-	buildTextTag(tagType, value) {
+	/**
+     * find MOOV atom dfLa box
+     */
+	extractStreamInfoFromMoov(buffer, start, end) {
 
-		const valueBytes = this.encoder.encode(value);
-		const totalSize = 24 + valueBytes.length;
-		const buffer = new Uint8Array(totalSize);
-		const view = new DataView(buffer.buffer);
-		
-		view.setUint32(
-			0,
-			totalSize,
-			false
+		const view = new DataView(
+			buffer.buffer,
+			buffer.byteOffset,
+			buffer.byteLength
 		);
-		view.setUint32(
-			4,
-			tagType,
-			false
-		);
-		view.setUint32(
-			8,
-			16 + valueBytes.length,
-			false
-		);
-		view.setUint32(
-			12,
-			this.DATA,
-			false
-		);
-		view.setUint32(
-			16,
-			this.UTF8_TYPE,
-			false
-		);
-		view.setUint32(
-			20,
-			0,
-			false
-		);
-		
-		buffer.set(
-			valueBytes,
-			24
-		);
+        
+		// find dfLa signature within MOOV range
+		for(let p = start; p < end - 4; p++) {
 
-		return buffer;
-	
-	}
+			if(view.getUint32(
+				p,
+				false
+			) === DFLA) {
 
-	buildCoverTag(coverData) {
+				// maybe dfLa box found at p (p = type, p-4 = size)
+				const boxStart = p - 4;
+				const boxSize = view.getUint32(
+					boxStart,
+					false
+				);
+                
+				// sanity check
+				if(boxSize < 42 || boxStart + boxSize > end)
+					continue;
 
-		const imageBytes = new Uint8Array(coverData.data);
-		const imageType = (coverData.type || "").includes("png") ? this.PNG_TYPE : this.JPEG_TYPE;
-		const totalSize = 24 + imageBytes.length;
-		
-		const buffer = new Uint8Array(totalSize);
-		const view = new DataView(buffer.buffer);
-		
-		view.setUint32(
-			0,
-			totalSize,
-			false
-		);
-		view.setUint32(
-			4,
-			this.TAG_MAP.COVR,
-			false
-		);
-		view.setUint32(
-			8,
-			16 + imageBytes.length,
-			false
-		);
-		view.setUint32(
-			12,
-			this.DATA,
-			false
-		);
-		view.setUint32(
-			16,
-			imageType,
-			false
-		);
-		view.setUint32(
-			20,
-			0,
-			false
-		);
-		
-		buffer.set(
-			imageBytes,
-			24
-		);
+				// parse content : [size 4][dfLa 4][fullBox ver/flags 4][blockHeader 4][streamInfo 34]
+				const metaBlockHeaderPos = p + 8; // skip type(4) + fullBox(4)
+				const metaBlockHeader = view.getUint32(
+					metaBlockHeaderPos,
+					false
+				);
+                
+				// first block in dfLa must be streamInfo (type 0)
+				const blockType = (metaBlockHeader >>> 24) & 0x7F;
 
-		return buffer;
-	
-	}
+				if(blockType === 0) {
 
-	buildAtom(atomType, subAtoms) {
+					const streamInfoStart = metaBlockHeaderPos + 4;
 
-		let totalDataSize = 0;
-
-		for(const atom of subAtoms) {
-
-			totalDataSize += atom.data.length;
+					// slice distinct copy >> final file
+					return buffer.slice(
+						streamInfoStart,
+						streamInfoStart + 34
+					);
+				
+				}
+			
+			}
 		
 		}
 
-		const totalSize = 8 + totalDataSize;
-		const buffer = new Uint8Array(totalSize);
-		const view = new DataView(buffer.buffer);
-		
-		view.setUint32(
-			0,
-			totalSize,
-			false
-		);
-		view.setUint32(
-			4,
-			atomType,
-			false
-		);
-
-		let pos = 8;
-
-		for(const atom of subAtoms) {
-
-			buffer.set(
-				atom.data,
-				pos
-			);
-			pos += atom.data.length;
-		
-		}
-
-		return buffer;
+		return null;
 	
 	}
 
-	buildM4AFile(atoms) {
+	buildFlac(streamInfo, audioChunks, totalAudioLen, metadata, coverImage) {
 
-		let totalSize = 0;
+		// prepare metadata blocks
+		const vorbisBlock = this.buildVorbisComment(metadata);
+		let pictureBlock = null;
 
-		for(const atom of atoms) {
+		if(coverImage && coverImage.data) {
 
-			totalSize += atom.data.length;
+			pictureBlock = this.buildPictureBlock(coverImage);
 		
 		}
 
-		const buffer = new Uint8Array(totalSize);
+		// calc output size
+		let totalSize = 4 + 38 + (4 + vorbisBlock.length);
+
+		if(pictureBlock)
+			totalSize += (4 + pictureBlock.length);
+
+		totalSize += totalAudioLen;
+
+		const output = new Uint8Array(totalSize);
+		const view = new DataView(output.buffer);
 		let pos = 0;
 
-		for(const atom of atoms) {
+		// flac header
+		view.setUint32(
+			pos,
+			FLAC_SIGNATURE,
+			false
+		);
+		pos += 4;
 
-			buffer.set(
-				atom.data,
+		// streamInfo (block type 0)
+		// last=0, type=0, size=34 => 0x00000022
+		view.setUint32(
+			pos,
+			0x00000022,
+			false
+		);
+		pos += 4;
+		output.set(
+			streamInfo,
+			pos
+		);
+		pos += 34;
+
+		// vorbis comment (block type 4)
+		const isLastMeta = !pictureBlock;
+		const vorbisHeader = ((isLastMeta ? 1 : 0) << 31) | (4 << 24) | (vorbisBlock.length & 0xFFFFFF);
+
+		view.setUint32(
+			pos,
+			vorbisHeader >>> 0,
+			false
+		);
+		pos += 4;
+		output.set(
+			vorbisBlock,
+			pos
+		);
+		pos += vorbisBlock.length;
+
+		// picture (block type 6) / optional
+		if(pictureBlock) {
+
+			const picHeader = (1 << 31) | (6 << 24) | (pictureBlock.length & 0xFFFFFF);
+
+			view.setUint32(
+				pos,
+				picHeader >>> 0,
+				false
+			);
+			pos += 4;
+			output.set(
+				pictureBlock,
 				pos
 			);
-			pos += atom.data.length;
+			pos += pictureBlock.length;
 		
 		}
 
-		return buffer;
+		// audio frames
+		for(const chunk of audioChunks) {
+
+			output.set(
+				chunk,
+				pos
+			);
+			pos += chunk.length;
+		
+		}
+
+		return output;
+	
+	}
+
+	buildVorbisComment(metadata) {
+
+		const vendorBytes = this.encoder.encode("MetaFlaque");
+		const entries = [];
+
+		for(const [key, value] of Object.entries(metadata)) {
+
+			if(key && value) {
+
+				const finalKey = this.TAG_MAP[key.toUpperCase()] || key.toUpperCase();
+				const entryStr = `${finalKey}=${value}`;
+
+				entries.push(this.encoder.encode(entryStr));
+			
+			}
+		
+		}
+
+		let totalSize = 4 + vendorBytes.length + 4;
+
+		entries.forEach(e =>
+			totalSize += (4 + e.length));
+
+		const block = new Uint8Array(totalSize);
+		const view = new DataView(block.buffer);
+		let pos = 0;
+
+		view.setUint32(
+			pos,
+			vendorBytes.length,
+			true
+		);
+		pos += 4;
+		block.set(
+			vendorBytes,
+			pos
+		);
+		pos += vendorBytes.length;
+
+		view.setUint32(
+			pos,
+			entries.length,
+			true
+		);
+		pos += 4;
+
+		for(const entry of entries) {
+
+			view.setUint32(
+				pos,
+				entry.length,
+				true
+			);
+			pos += 4;
+			block.set(
+				entry,
+				pos
+			);
+			pos += entry.length;
+		
+		}
+
+		return block;
+	
+	}
+
+	buildPictureBlock(coverDat) {
+
+		const imageBytes = new Uint8Array(coverDat.data);
+		const mimeType = coverDat.type || "image/jpeg";
+		const mimeBytes = this.encoder.encode(mimeType);
+        
+		const totalSize = 32 + mimeBytes.length + imageBytes.length;
+		const block = new Uint8Array(totalSize);
+		const view = new DataView(block.buffer);
+		let pos = 0;
+
+		view.setUint32(
+			pos,
+			3,
+			false
+		);
+		pos += 4; // type 3 (front)
+		view.setUint32(
+			pos,
+			mimeBytes.length,
+			false
+		);
+		pos += 4;
+		block.set(
+			mimeBytes,
+			pos
+		);
+		pos += mimeBytes.length;
+		view.setUint32(
+			pos,
+			0,
+			false
+		);
+		pos += 4; // desc Len
+		view.setUint32(
+			pos,
+			0,
+			false
+		);
+		pos += 4; // width
+		view.setUint32(
+			pos,
+			0,
+			false
+		);
+		pos += 4; // height
+		view.setUint32(
+			pos,
+			24,
+			false
+		);
+		pos += 4; // depth
+		view.setUint32(
+			pos,
+			0,
+			false
+		);
+		pos += 4; // colors
+		view.setUint32(
+			pos,
+			imageBytes.length,
+			false
+		);
+		pos += 4;
+		block.set(
+			imageBytes,
+			pos
+		);
+        
+		return block;
+	
+	}
+
+	rebuildRawFlac(data, metadata, coverImage) {
+
+		const view = new DataView(
+			data.buffer,
+			data.byteOffset,
+			data.byteLength
+		);
+        
+		// find end of existing metadata
+		let endPos = 4;
+
+		while(endPos < data.length) {
+
+			const h = view.getUint32(
+				endPos,
+				false
+			);
+			const isLast = (h & 0x80000000) !== 0;
+			const size = h & 0x00FFFFFF;
+
+			endPos += 4 + size;
+
+			if(isLast)
+				break;
+		
+		}
+        
+		const firstHeader = view.getUint32(
+			4,
+			false
+		);
+		const firstSize = firstHeader & 0x00FFFFFF;
+		const streamInfo = data.slice(
+			8,
+			8 + firstSize
+		);
+		const audio = data.slice(endPos);
+        
+		return this.buildFlac(
+			streamInfo,
+			[audio],
+			audio.length,
+			metadata,
+			coverImage
+		);
 	
 	}
 
 }
 
-export {M4aProcessor}
+export {
+	M4aProcessor
+};

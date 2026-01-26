@@ -5,8 +5,6 @@ class TidalPopup extends BasePopup {
 	constructor() {
 
 		super();
-
-		this.showCovers = false;
 	
 	}
 
@@ -33,15 +31,7 @@ class TidalPopup extends BasePopup {
 
 	renderAlbum() {
 
-		const cover = this.media.cover.replaceAll(
-			"-",
-			"/"
-		);
-
 		this.elements.mediainfo.innerHTML = `
-				${this.showCovers ? `<div class="album-cover">
-					<img src="https://resources.tidal.com/images/${cover}/640x640.jpg"/>
-				</div>` : ""}
 				<div class="album-info">
 					<div class="album-title">${this.media.title}</div>
 					<div class="album-artist">${this.media.artists[0].name}</div>
@@ -79,15 +69,7 @@ class TidalPopup extends BasePopup {
 
 	renderArtist() {
 
-		const cover = (this.media.item.data?.picture || "").replaceAll(
-			"-",
-			"/"
-		);
-		
 		this.elements.mediainfo.innerHTML = `
-				${this.showCovers ? `<div class="artist-cover">
-					<img src="https://resources.tidal.com/images/${cover}/750x750.jpg"/>
-				</div>` : ""}
 				<div class="artist-info">
 					<div class="artist-name">${this.media.item.data.name}</div>
 				</div>
@@ -123,11 +105,48 @@ class TidalPopup extends BasePopup {
 
 	}
 
-	createTrackItemHTML(track) {
+	renderLabel() {
+
+	}
+
+	renderPlaylist() {
+
+		this.elements.mediainfo.innerHTML = `
+				<div class="playlist-info">
+					<div class="playlist-name">${this.media.title}</div>
+					<div class="playlist-data">
+						<div class="playlist-tracks">${this.media.tracks.length} / ${this.media.numberOfTracks} tracks${this.media.tracks.length < this.media.numberOfTracks ? " - scroll down please" : ""}</div>
+					</div>
+				</div>
+				<button class="playlist-download download-btn" data-type="playlist" data-id="${this.media.id}"></button>
+			`;
+		
+		this.elements.mediawrap.classList.remove("hide");
+		
+		this.elements.medialist.innerHTML = this.media?.tracks
+		.map((track, idx) =>
+			this.createTrackItemHTML(
+				track,
+				true,
+				idx
+			))
+		.join("");
+			
+		this.elements.media.querySelectorAll(".download-btn")
+		.forEach(btn =>
+			btn.addEventListener(
+				"click",
+				evt =>
+					this.downloadMedia(evt.target)
+			));
+
+	}
+
+	createTrackItemHTML(track, more = false, idx = 0) {
 
 		return `
 			<div class="mediaitem">
-				<div class="track-number">${track.trackNumber || "—"}</div>
+				<div class="track-number">${more ? idx + 1 : track.trackNumber || "—"}</div>
 				<div class="track-info">
 					<div class="track-title">${track.title}${track.version ? ` (${track.version})` : ""}</div>
 					<div class="track-artist">${track.artists[0].name}</div>
@@ -142,16 +161,22 @@ class TidalPopup extends BasePopup {
 
 		return `
 			<div class="mediaitem">
-				${this.showCovers ? `<div class="release-cover">
-					<img src="https://resources.tidal.com/images/${release.cover}/640x640.jpg"/>
-				</div>` : ""}
 				<div class="release-info">
 					<div class="release-title">${release.title}${release.version ? ` (${release.version})` : ""}</div>
 					<div class="release-data">
-						<div class="release-year">${new Date(release.releaseDate).getFullYear()}</div>
-						<div class="release-label" data-id="${0}">${release.copyright.replace(/\(c\)\s\d{4}\s/gi, "")}</div>
+						<div class="release-year">${new Date(release.releaseDate)
+	.getFullYear()}</div>
+						<div class="release-label" data-id="${0}">${release.copyright.replace(
+	/(?:\(c\))?\s?\d{4}\s/gi,
+	""
+)}</div>
 					</div>
-					<div class="release-about">${release.type.toLowerCase()} - ${release.numberOfTracks} track${release.numberOfTracks !== 1 ? "s" : ""}</div>
+					<div class="release-about">${release.type.toLowerCase()} - ${release.numberOfTracks} track${release.numberOfTracks !== 1 ? "s" : ""} - ${release.mediaMetadata.tags.at(-1)
+.replaceAll(
+	"_",
+	" "
+)
+.toLowerCase()}</div>
 				</div>
 				<button class="release-download download-btn" data-type="release" data-id="${release.id}" ${release.allowStreaming ? "" : " disabled"}></button>
 			</div>

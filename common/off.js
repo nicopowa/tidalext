@@ -99,6 +99,8 @@ class BaseOffscreenProcessor {
 
 	clear(msg) {
 
+		// single blobs Map tracks + covers ?
+		
 		const taskId = msg.id;
 
 		if(this.blobs.has(taskId)) {

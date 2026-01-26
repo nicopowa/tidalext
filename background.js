@@ -1,11 +1,18 @@
 import {browse, DEBUG} from "./common/vars.js";
 import {Backstage} from "./common/back.js";
+import {deep} from "./common/util.js";
 
 class TidalBackground extends Backstage {
 
 	constructor() {
 
 		super();
+
+		this.opt = {
+			...this.opt,
+			// 80 160 320 640 1280
+			coverSize: 640
+		};
 
 		this.urlBase = "https://tidal.com/";
 		this.quality = "LOSSLESS";
@@ -22,7 +29,8 @@ class TidalBackground extends Backstage {
 		this.watch({
 			"/v1/country": this.handleCountry,
 			"/pages/album": this.handleAlbum,
-			"/v2/artist/": this.handleArtist
+			"/v2/artist/": this.handleArtist,
+			"/v1/playlists/": this.handlePlaylist
 		});
 	
 	}
@@ -81,11 +89,7 @@ class TidalBackground extends Backstage {
 
 	handleCountry(tab, dat) {
 
-		if(DEBUG)
-			console.log(
-				"COUNTRY",
-				dat
-			);
+		//if(DEBUG) console.log("COUNTRY", dat);
 
 		this.dat.countryCode = dat.countryCode || "US";
 
@@ -167,10 +171,28 @@ class TidalBackground extends Backstage {
 
 	handlePlaylist(tab, dat) {
 
-		dat = {
-			...dat,
-			extype: "playlist"
-		};
+		const cur = this.medias.get(tab.id) || {};
+
+		dat = deep(
+			(cur.extype === "playlist" ? cur : {
+				items: [],
+				tracks: []
+			}),
+			{
+				...dat,
+				extype: "playlist"
+			}
+		);
+
+		const newTracks = (dat.items || []).map(item =>
+			item.item);
+
+		for(const newTrack of newTracks)
+			if(!dat.tracks.find(hasTrack =>
+				hasTrack.id === newTrack.id))
+				dat.tracks.push(newTrack);
+
+		delete dat.items;
 
 		this.medias.set(
 			tab.id,
@@ -184,9 +206,15 @@ class TidalBackground extends Backstage {
 				dat
 			);
 
+		this.mediaHint();
+
+		this.syncPopup();
+
 	}
 
 	parseAlbum(dat) {
+
+		console.log(dat);
 
 		const modules = dat.rows.map(row =>
 			row.modules?.[0]);
@@ -208,15 +236,15 @@ class TidalBackground extends Backstage {
 
 	}
 
-	async getReleaseInfos(releaseId) {
+	async getRelease(releaseId) {
 
 		if(DEBUG)
 			console.log(
-				"get release infos",
+				"get release data",
 				releaseId
 			);
 
-		const releaseInfos = this.parseAlbum(await this.request(
+		const releaseData = this.parseAlbum(await this.request(
 			"pages/album",
 			{
 				albumId: releaseId,
@@ -226,26 +254,34 @@ class TidalBackground extends Backstage {
 			}
 		));
 
-		//console.log(releaseInfos);
+		//console.log(releaseData);
 
-		return releaseInfos;
+		return releaseData;
 
 	}
 	
-	trackList(tabId, media) {
+	trackList(media) {
 
-		//return this.medias.get(tabId)?.tracks || [];
-		return ((media || this.medias.get(tabId))?.tracks || [])
+		return (media?.tracks || [])
 		.filter(track =>
 			track.allowStreaming);
 	
 	}
 
-	getTrackInfos(track, album) {
+	playlistInfos(list) {
+
+		return {
+			listName: list.title,
+			tracks: list.numberOfTracks
+		};
+		
+	}
+
+	getTrackInfos(track) {
 
 		return {
 			title: this.trackTitle(track),
-			album: this.albumTitle(album),
+			//album: this.albumTitle(album),
 			artist: track.artists[0].name
 		};
 	
@@ -291,26 +327,29 @@ class TidalBackground extends Backstage {
 	
 	}
 
-	getCoverUrl(tabId, media) {
+	getCoverUrl(media) {
+		
+		const coverSize = this.opt.coverSize;
 
-		// 80 160 320 640 1280
-		const coverSize = 640;
-
-		return `https://resources.tidal.com/images/${(media?.album?.cover || media.cover).replaceAll(
+		return `https://resources.tidal.com/images/${(media?.album?.cover || media?.cover).replaceAll(
 			"-",
 			"/"
 		)}/${coverSize}x${coverSize}.jpg`;
 
 	}
 
-	getFilePath(track, album) {
+	getFilePath(track, album, rules) {
 
-		const variousArtists = album?.artists.length === 1
-		&& album.artists[0].name.toLowerCase() === "various artists";
+		const theArtist = track.artists || album.artists;
+		const variousArtists = theArtist.length === 1
+		&& theArtist[0].name.toLowerCase() === "various artists";
 
-		const artistName = this.sanitize(variousArtists ? "Various Artists" : album?.artists[0]?.name);
+		const artistName = (variousArtists ? "Various Artists" : theArtist[0]?.name).replaceAll(
+			"/",
+			"-"
+		); // Hells Bells
 
-		const albumTitle = this.sanitize(this.albumTitle(album));
+		const albumTitle = this.albumTitle(album);
 
 		const albumYear = new Date(album.releaseDate || 0)
 		.getFullYear();
@@ -321,42 +360,66 @@ class TidalBackground extends Backstage {
 			"0"
 		);
 
-		const fileName = this.sanitize(`${trackNum}. ${variousArtists ? track.artists[0]?.name + " -" : ""} ${this.trackTitle(track)}`);
+		let filePath = this.sanitize(`${artistName}/${albumTitle} (${albumYear})/${trackNum}. ${variousArtists ? track.artists[0]?.name + " - " : ""}${this.trackTitle(track)}`);
 		
-		const fileExt = ".m4a";
+		if(rules && rules.list) {
 
-		return `Tidal/${artistName}/${albumTitle} (${albumYear})/${fileName}${fileExt}`;
+			const trackIndex = rules.indx.toString()
+			.padStart(
+				rules.tracks.toString().length,
+				"0"
+			);
+
+			filePath = this.sanitize(`${rules.listName}/${trackIndex}. ${artistName} - ${this.trackTitle(track)}`);
+
+		}
+
+		//const fileExt = ".m4a";
+		const fileExt = ".flac";
+
+		return `Tidal/${filePath}${fileExt}`;
 
 	}
 
 	getMetaData(track, album) {
 
+		const theArtist = track.artists || album.artists;
+
 		return {
 
 			"TITLE": this.trackTitle(track),
-			...(track.version && {
+			...(track.version ? {
 				"VERSION": track.version
-			}),
-			"ARTIST": track.artists[0]?.name || album?.artists[0]?.name || "Unknown",
+			} : {}),
+
+			"ARTIST": theArtist[0]?.name || "Unknown",
 			
 			"ALBUM": this.albumTitle(album),
-			"ALBUMARTIST": album?.artists[0]?.name || "Unknown",
+			"ALBUMARTIST": theArtist[0]?.name || "Unknown",
 
-			...(album.copyright && {
+			...(album.copyright ? {
 				"COPYRIGHT": album.copyright
-			}),
+			} : {}),
 
-			"DATE": new Date(album?.releaseDate || 0)
-			.getFullYear(),
+			...(album?.releaseDate ? {
+				"DATE": new Date(album.releaseDate)
+				.getFullYear(),
+				"ORIGINALDATE": album.releaseDate
+			} : {}),
 
 			"TRACKNUMBER": String(track.trackNumber || 1),
-			"TOTALTRACKS": String(album?.numberOfTracks || ""),
+			"TOTALTRACKS": String(album?.numberOfTracks || 1),
 		
-			// ISRC
+			// ISRC (enable Settings > Display > Audio metadata)
+			...(track.isrc ? {
+				"ISRC": track.isrc
+			} : {}),
 
 			// UPC
 
-			// URL
+			...(track.url ? {
+				"URL": track.url
+			} : {}),
 
 			...(track.replayGain && {
 				"REPLAYGAIN_TRACK_GAIN": track.replayGain + " dB"

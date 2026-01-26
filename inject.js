@@ -3,7 +3,8 @@
 	const urls = [
 		"/v1/country",
 		"/pages/album",
-		"/v2/artist/"
+		"/v2/artist/",
+		"/v1/playlists/"
 	];
 
 	const fetched = window.fetch;
