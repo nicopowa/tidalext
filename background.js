@@ -174,7 +174,7 @@ class TidalBackground extends Backstage {
 		const cur = this.medias.get(tab.id) || {};
 
 		dat = deep(
-			(cur.extype === "playlist" ? cur : {
+			(cur.extype === "playlist" && !dat.uuid ? cur : {
 				items: [],
 				tracks: []
 			}),
@@ -234,6 +234,17 @@ class TidalBackground extends Backstage {
 			extype: "album"
 		};
 
+	}
+
+	getArtist(artist) {
+
+		return artist.items.filter(item =>
+			["ARTIST_ALBUMS", "ARTIST_TOP_SINGLES"].includes(item.moduleId))
+		.map(item =>
+			item.items.map(idem =>
+				idem.data))
+		.flat();
+	
 	}
 
 	async getRelease(releaseId) {

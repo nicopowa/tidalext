@@ -42,6 +42,19 @@ const deep = (obj1, obj2) =>
 		)
 	});
 
+const wait = (ms = 0) => {
+
+	if(!ms)
+		ms = Math.round(234 + Math.sign(Math.random() - .5) * Math.random() * 123);
+
+	return new Promise(thenWhat =>
+		setTimeout(
+			thenWhat,
+			ms
+		));
+
+};
+
 export {
-	deep
+	deep, wait
 };

@@ -73,6 +73,7 @@ class TidalPopup extends BasePopup {
 				<div class="artist-info">
 					<div class="artist-name">${this.media.item.data.name}</div>
 				</div>
+				<button class="artist-download download-btn" data-type="artist" data-id="${this.media.item.data.id}"></button>
 			`;
 
 		this.elements.mediawrap.classList.remove(
@@ -106,16 +107,18 @@ class TidalPopup extends BasePopup {
 	}
 
 	renderLabel() {
-
 	}
 
 	renderPlaylist() {
 
+		const count = this.media.tracks.length;
+		const total = this.media.numberOfTracks;
+
 		this.elements.mediainfo.innerHTML = `
 				<div class="playlist-info">
 					<div class="playlist-name">${this.media.title}</div>
-					<div class="playlist-data">
-						<div class="playlist-tracks">${this.media.tracks.length} / ${this.media.numberOfTracks} tracks${this.media.tracks.length < this.media.numberOfTracks ? " - scroll down please" : ""}</div>
+					<div class="count-data">
+						<div class="count-items">${count} / ${total} tracks<br/>${count < total ? "please scroll down" : "parsing complete"}</div>
 					</div>
 				</div>
 				<button class="playlist-download download-btn" data-type="playlist" data-id="${this.media.id}"></button>

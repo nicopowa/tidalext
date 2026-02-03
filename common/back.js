@@ -1,5 +1,6 @@
 import { browse, action, DEBUG } from "./vars.js";
 import { Offscreen } from "./out.js";
+import { wait } from "./util.js";
 
 class Backstage {
 
@@ -371,6 +372,12 @@ class Backstage {
 	
 	}
 
+	sameTab(tab, dat) {
+
+		// from child classes
+	
+	}
+
 	async getSetting(key) {
 
 		return (await browse.storage.local.get(key))[key];
@@ -515,6 +522,38 @@ class Backstage {
 					));
 			
 			}
+			else if(mediaType === "artist") {
+
+				const releases = this.getArtist(mediaData);
+
+				console.log(releases);
+
+				for(const rel of releases) {
+
+					const release = await this.getRelease(rel.id);
+
+					const coverBlob = await this.getCover(this.getCoverUrl(release));
+
+					this.trackList(release)
+					.forEach(track =>
+						this.trackDownload(
+							track,
+							quality,
+							release,
+							coverBlob
+						));
+
+					await wait();
+
+				}
+
+			}
+			else if(mediaType === "label") {
+
+				console.log("batch label");
+				console.log(mediaData);
+
+			}
 			else {
 
 				this.handleError({
@@ -613,6 +652,10 @@ class Backstage {
 		
 		}
 	
+	}
+
+	getArtist(artist) {
+		// from child classes
 	}
 
 	async getRelease(releaseId) {
@@ -823,7 +866,7 @@ class Icn {
 			}
 		);
 
-		this.ctx.font = Math.round(this.size * 4 / 5) + "px Arial";
+		this.ctx.font = Math.round(this.size * 4 / 5) + "px Segoe UI";
 		this.ctx.textAlign = "center";
 		this.ctx.textBaseline = "alphabetic";
 
@@ -966,18 +1009,6 @@ class Queue {
 	
 	}
 
-	runProc() {
-
-		return this.main.off.ensure(this.proc);
-
-	}
-
-	endProc() {
-
-		return this.main.off.close();
-
-	}
-
 	async process() {
 
 		if(this.processing || !this.tasks.length)
@@ -985,7 +1016,7 @@ class Queue {
 
 		this.processing = true;
 
-		await this.runProc();
+		await this.main.off.ensure(this.proc);
 
 		this.processNext();
 	
@@ -995,7 +1026,7 @@ class Queue {
 
 		if(!this.tasks.length) {
 
-			await this.endProc();
+			await this.main.off.close();
 
 			this.current = null;
 			this.processing = false;
@@ -1126,16 +1157,11 @@ class Queue {
 
 		this.main.sendQueue();
 
-		setTimeout(
-			() => {
+		await wait();
 
-				this.tasks.shift();
+		this.tasks.shift();
 				
-				this.processNext();
-			
-			},
-			234
-		);
+		this.processNext();
 	
 	}
 

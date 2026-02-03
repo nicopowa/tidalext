@@ -30,7 +30,7 @@ class BasePopup {
 
 	handleMessage(msg) {
 
-		// console.log(msg);
+		//console.log(msg.type);
 
 		switch(msg.type) {
 

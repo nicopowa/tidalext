@@ -13,7 +13,7 @@ Looking for [QobuzExt](https://github.com/nicopowa/qobuzext) ?
 
 ## Informations
 
-- First testing version
+- Work in progress
 - Active subscription required
 
 
