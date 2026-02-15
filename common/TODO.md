@@ -1,9 +1,13 @@
 # Tout doux
 
 - [ ] keep todo list up to date
+- [ ] Qobuz & Tidal offscreen.js now identical, delete and pass processor class from qobuzext.js & tidalext.js
+- [ ] artists & labels "please scroll down" add button auto scroll
+- [ ] github releases zip chromium && firefox
+- [ ] send watch urls from background to injected code ? page load race condition ?
 - [ ] keep downloaded tracks ids in storage && skip ?
 - [ ] fix playlist indexes ++ unstreamable tracks
-- [ ] edge extension breaks after some time, popup not opening, reload service worker inactive glitch / fix : extension listeners init first ? fail / edge://serviceworker-internals/
+- [ ] edge extension breaks after some time, popup not opening, reload service worker inactive glitch / fix fail : extension listeners init first / edge://serviceworker-internals/
 - [ ] file system permission directory ref better downloads management (duplicates, covers, ...)
 - [ ] user library download & sync
 - [ ] multiple tabs handling not stable
@@ -31,14 +35,14 @@
 - [x] pool scrolling pages content merge loading medias
 - [x] unify background generic handleDownload method >> subclasses trackList find by id
 - [ ] icon badge status tiny sub icon or queue size
-- [ ] icon feedback on error and show messages top popup / unstable
+- [ ] icon hint on error and show messages top popup / unstable
 - [x] album download if various artists set directory album name only instead of splitting artists dirs
-- [ ] if various artists set file name {num}. {artist} - {title}
+- [x] if various artists set file name {num}. {artist} - {title}
 - [x] detect artist playlist label ... pages and batch download tracks
 - [x] improve queue items infos
 - [ ] show current download size or segments progress text ?
 - [x] on open popup ask force sync queue
-- [ ] connected account icon hint
+- [ ] connected account & premium state icon hint
 - [ ] inject content download button in ⋮ menus ⋯
 - [x] download album cover file
 - [ ] check subscription status

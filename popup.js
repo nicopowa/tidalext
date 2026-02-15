@@ -1,4 +1,5 @@
 import {BasePopup} from "./common/pops.js";
+import {Type} from "./common/vars.js";
 
 class TidalPopup extends BasePopup {
 
@@ -10,7 +11,7 @@ class TidalPopup extends BasePopup {
 
 	updateQualityOptions() {
 
-		if(this.media.extype !== "album") {
+		if(this.media.extype !== Type.ALBUM) {
 
 			return;
 		
@@ -72,6 +73,13 @@ class TidalPopup extends BasePopup {
 		this.elements.mediainfo.innerHTML = `
 				<div class="artist-info">
 					<div class="artist-name">${this.media.item.data.name}</div>
+					<div class="count-data">
+						<div class="count-items">${this.media.releases.length} releases (${this.media.releases.reduce(
+	(sum, rel) =>
+		sum + rel.numberOfTracks,
+	0
+)} tracks)<br/>${this.media.hasMore ? "please scroll down" : "parsing complete"}</div>
+					</div>
 				</div>
 				<button class="artist-download download-btn" data-type="artist" data-id="${this.media.item.data.id}"></button>
 			`;
@@ -80,14 +88,7 @@ class TidalPopup extends BasePopup {
 			"hide"
 		);
 
-		const releases = this.media.items.filter(item =>
-			["ARTIST_ALBUMS", "ARTIST_TOP_SINGLES"].includes(item.moduleId))
-		.map(item =>
-			item.items.map(idem =>
-				idem.data))
-		.flat();
-
-		this.elements.medialist.innerHTML = releases
+		this.elements.medialist.innerHTML = this.media.releases
 		.map(release =>
 			this.createReleaseItemHTML(release))
 		.join("");
@@ -189,8 +190,6 @@ class TidalPopup extends BasePopup {
 
 }
 
-window.addEventListener(
-	"load",
-	() =>
-		new TidalPopup()
-);
+export {
+	TidalPopup
+};

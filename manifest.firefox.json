@@ -1,7 +1,7 @@
 {
 	"manifest_version": 3,
 	"name": "TidalExt",
-	"version": "1.6",
+	"version": "1.7",
 	"description": "〜ヽ(⌐￭_￭)ノ♪♬",
 	"author": "Nico Pr",
 	"homepage_url": "https://github.com/nicopowa/tidalext",
@@ -12,7 +12,7 @@
 	"permissions": ["storage", "downloads", "webRequest", "tabHide"],
 	"host_permissions": ["https://*.tidal.com/*"],
 	"background": {
-		"scripts": ["background.js"],
+		"scripts": ["tidalext.js"],
 		"type": "module"
 	},
 	"content_scripts": [
@@ -32,7 +32,7 @@
 	"commands": {
 		"reload": {
 			"suggested_key": {
-				"default": "Alt+Q"
+				"default": "Alt+T"
 			},
 			"description": "reload"
 		}

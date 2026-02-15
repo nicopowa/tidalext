@@ -1,13 +1,14 @@
 import {browse, DEBUG} from "./vars.js";
+import {Core} from "./core.js";
 
-class BaseOffscreenProcessor {
+class OffscreenBase extends Core {
 
 	constructor() {
 
+		super();
+
 		this.blobs = new Map();
 		this.covrs = new Map();
-		
-		browse.runtime.onMessage.addListener(this.handleMessage.bind(this));
 	
 	}
 
@@ -99,7 +100,7 @@ class BaseOffscreenProcessor {
 
 	clear(msg) {
 
-		// single blobs Map tracks + covers ?
+		// single blobs Map for tracks & covers ?
 		
 		const taskId = msg.id;
 
@@ -124,5 +125,5 @@ class BaseOffscreenProcessor {
 }
 
 export {
-	BaseOffscreenProcessor
+	OffscreenBase
 };

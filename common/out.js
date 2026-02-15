@@ -1,4 +1,9 @@
-import {browse, DEBUG} from "./vars.js";
+import {browse} from "./vars.js";
+
+const Mode = {
+	OFFSCREEN: 0,
+	HIDDENTAB: 1
+};
 
 class Offscreen {
 
@@ -25,7 +30,7 @@ class Offscreen {
 		
 		}
 
-		this.mode = "offscreen";
+		this.mode = Mode.OFFSCREEN;
 
 	}
 
@@ -36,7 +41,7 @@ class Offscreen {
 			try {
 
 				await browse.tabs.get(this.tabId);
-				this.mode = "hiddentab";
+				this.mode = Mode.HIDDENTAB;
 
 				return;
 			
@@ -57,7 +62,7 @@ class Offscreen {
 		await browse.tabs.hide(tab.id);
 
 		this.tabId = tab.id;
-		this.mode = "hiddentab";
+		this.mode = Mode.HIDDENTAB;
 	
 	}
 
@@ -72,9 +77,9 @@ class Offscreen {
 
 	async post(message) {
 
-		if(this.mode === "offscreen")
+		if(this.mode === Mode.OFFSCREEN)
 			browse.runtime.sendMessage(message);
-		else if(this.mode === "hiddentab")
+		else if(this.mode === Mode.HIDDENTAB)
 			browse.tabs.sendMessage(
 				this.tabId,
 				message
@@ -84,9 +89,9 @@ class Offscreen {
 
 	async close() {
 
-		if(this.mode === "offscreen")
+		if(this.mode === Mode.OFFSCREEN)
 			await browse.offscreen.closeDocument();
-		else if(this.mode === "hiddentab" && this.tabId)
+		else if(this.mode === Mode.HIDDENTAB && this.tabId)
 			await browse.tabs.remove(this.tabId);
 
 		this.mode = "";
@@ -99,4 +104,3 @@ class Offscreen {
 export {
 	Offscreen
 };
-

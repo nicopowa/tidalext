@@ -1,3 +1,33 @@
+import { browse } from "./vars.js";
+
+class Util {
+
+	static get where() {
+
+		if(typeof ServiceWorkerGlobalScope !== "undefined" && self instanceof ServiceWorkerGlobalScope)
+			return "bck";
+
+		if(typeof window !== "undefined" && window.location.protocol !== "chrome-extension:")
+			return "cnt";
+
+		if(typeof browse.tabs === "undefined" && typeof browse.action === "undefined")
+			return "off";
+
+		if(window.opener || (window.outerWidth <= 600 && window.outerHeight <= 600))
+			return "pop";
+	
+		return "ext";
+
+	}
+
+	static get manifest() {
+
+		return browse.runtime.getManifest();
+
+	}
+
+}
+
 const deep = (obj1, obj2) =>
 	({
 		...obj1,
@@ -8,17 +38,17 @@ const deep = (obj1, obj2) =>
 				const val1 = obj1[key];
 				const val2 = obj2[key];
 
-				// 1. If both are Arrays, concatenate them
+				// contat arrays
 				if(Array.isArray(val1) && Array.isArray(val2)) {
 
 					acc[key] = [...val1, ...val2];
 				
 				}
-				// 2. If both are Objects (and not arrays), go deeper
+				// merge objects & recurse
 				else if(
 					val1
             && typeof val2 === "object"
-            && val2 !== null // Added safety check for null
+            && val2 !== null // safety check
             && !Array.isArray(val2)
 				) {
 
@@ -28,7 +58,7 @@ const deep = (obj1, obj2) =>
 					);
 				
 				}
-				// 3. Otherwise, overwrite with the new value
+				// overwrite with new value
 				else {
 
 					acc[key] = val2;
@@ -56,5 +86,5 @@ const wait = (ms = 0) => {
 };
 
 export {
-	deep, wait
+	Util, deep, wait
 };

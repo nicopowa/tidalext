@@ -1,6 +1,5 @@
-import {browse, DEBUG} from "./common/vars.js";
+import {DEBUG, Type} from "./common/vars.js";
 import {Backstage} from "./common/back.js";
-import {deep} from "./common/util.js";
 
 class TidalBackground extends Backstage {
 
@@ -144,13 +143,71 @@ class TidalBackground extends Backstage {
 
 		dat = {
 			...dat,
-			extype: "artist"
+			extype: Type.ARTIST
 		};
 
-		this.medias.set(
-			tab.id,
-			dat
-		);
+		const cur = this.mediaTab(tab);
+
+		if(dat.item) { // && dat.header ?
+
+			if(dat.items) {
+
+				const releasesTypes = ["ARTIST_ALBUMS", "ARTIST_TOP_SINGLES"];
+
+				dat.releases = dat.items.filter(releaseSection =>
+					releasesTypes.includes(releaseSection.moduleId || releaseSection.type))
+				.flatMap(releaseSection =>
+					releaseSection.data || releaseSection.items.map(sectionItem =>
+						sectionItem.data));
+			
+			}
+
+			this.medias.set(
+				tab.id,
+				dat
+			);
+		
+		}
+		else if(dat.itemLayout) {
+			
+			const releasesAdds = dat.items.map(rel =>
+				rel.data);
+
+			if(cur.extype === Type.ARTIST) {
+
+				dat = cur;
+
+				dat.releases.push(...releasesAdds.filter(releasing =>
+					!dat.releases.some(release =>
+						release.id === releasing.id)));
+			
+			}
+			else {
+
+				if(DEBUG)
+					console.log("artist info");
+
+				const artists = releasesAdds.flatMap(release =>
+					release.artists.map(artist =>
+						({
+							name: artist.name, id: artist.id
+						})));
+				const whoDat = artists.sort((a, b) =>
+					artists.filter(v =>
+						v.id === b.id).length - artists.filter(v =>
+						v.id === a.id).length)[0];
+
+				//console.log(whoDat);
+				dat.item = {
+					data: whoDat
+				};
+				dat.releases = releasesAdds;
+			
+			}
+
+		}
+
+		delete dat.items;
 
 		if(DEBUG)
 			console.log(
@@ -166,26 +223,39 @@ class TidalBackground extends Backstage {
 	}
 
 	handleLabel(tab, dat) {
-
+		// c'mon
 	}
 
 	handlePlaylist(tab, dat) {
 
-		const cur = this.medias.get(tab.id) || {};
+		const cur = this.mediaTab(tab);
 
-		dat = deep(
-			(cur.extype === "playlist" && !dat.uuid ? cur : {
+		if(dat.uuid) {
+
+			dat = {
+				extype: Type.LIST,
 				items: [],
-				tracks: []
-			}),
-			{
-				...dat,
-				extype: "playlist"
-			}
-		);
+				tracks: [],
+				...dat
+			};
+		
+		}
+		else if(cur.extype === Type.LIST) {
 
-		const newTracks = (dat.items || []).map(item =>
-			item.item);
+			dat = {
+				tracks: [],
+				...cur,
+				items: dat.items
+			};
+		
+		}
+
+		console.log(dat);
+
+		const newTracks = dat.items.map(item =>
+			item.item)
+		.filter(item =>
+			item.streamReady);
 
 		for(const newTrack of newTracks)
 			if(!dat.tracks.find(hasTrack =>
@@ -214,8 +284,6 @@ class TidalBackground extends Backstage {
 
 	parseAlbum(dat) {
 
-		console.log(dat);
-
 		const modules = dat.rows.map(row =>
 			row.modules?.[0]);
 
@@ -231,20 +299,9 @@ class TidalBackground extends Backstage {
 		return {
 			...albumInfos,
 			tracks: albumTracks,
-			extype: "album"
+			extype: Type.ALBUM
 		};
 
-	}
-
-	getArtist(artist) {
-
-		return artist.items.filter(item =>
-			["ARTIST_ALBUMS", "ARTIST_TOP_SINGLES"].includes(item.moduleId))
-		.map(item =>
-			item.items.map(idem =>
-				idem.data))
-		.flat();
-	
 	}
 
 	async getRelease(releaseId) {
@@ -332,8 +389,7 @@ class TidalBackground extends Backstage {
 		// if(DEBUG) console.log(manifestText);
 
 		return {
-			man: manifestText,
-			format: "m4a"
+			man: manifestText
 		};
 	
 	}
@@ -355,15 +411,14 @@ class TidalBackground extends Backstage {
 		const variousArtists = theArtist.length === 1
 		&& theArtist[0].name.toLowerCase() === "various artists";
 
-		const artistName = (variousArtists ? "Various Artists" : theArtist[0]?.name).replaceAll(
-			"/",
-			"-"
-		); // Hells Bells
+		const artistName = this.sanitize(variousArtists ? "Various Artists" : theArtist[0]?.name);
 
-		const albumTitle = this.albumTitle(album);
+		const albumTitle = this.sanitize(this.albumTitle(album));
 
 		const albumYear = new Date(album.releaseDate || 0)
 		.getFullYear();
+
+		const albumPart = album.numberOfVolumes > 1 && track.volumeNumber || 0; // media_count
 
 		const trackNum = String(track.trackNumber || 1)
 		.padStart(
@@ -371,9 +426,13 @@ class TidalBackground extends Backstage {
 			"0"
 		);
 
-		let filePath = this.sanitize(`${artistName}/${albumTitle} (${albumYear})/${trackNum}. ${variousArtists ? track.artists[0]?.name + " - " : ""}${this.trackTitle(track)}`);
+		const trackTitle = this.sanitize(`${variousArtists ? track.artists[0]?.name + " - " : ""}${this.trackTitle(track)}`);
+
+		let filePath = `${artistName}/${albumTitle} (${albumYear})/${albumPart ? `CD${albumPart}/` : ""}${trackNum}. ${trackTitle}`;
 		
 		if(rules && rules.list) {
+
+			const listName = this.sanitize(rules.listName);
 
 			const trackIndex = rules.indx.toString()
 			.padStart(
@@ -381,11 +440,11 @@ class TidalBackground extends Backstage {
 				"0"
 			);
 
-			filePath = this.sanitize(`${rules.listName}/${trackIndex}. ${artistName} - ${this.trackTitle(track)}`);
+			filePath = `${listName}/${trackIndex}. ${artistName} - ${trackTitle}`;
 
 		}
 
-		//const fileExt = ".m4a";
+		// m4what ?
 		const fileExt = ".flac";
 
 		return `Tidal/${filePath}${fileExt}`;
@@ -442,4 +501,6 @@ class TidalBackground extends Backstage {
 
 }
 
-new TidalBackground();
+export {
+	TidalBackground
+};

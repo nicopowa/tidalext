@@ -2,11 +2,11 @@
 
 Tidal downloader  
 
-Based on [tidal-dl-ng](https://github.com/exislow/tidal-dl-ng)  
+Based on [tidal-dl-ng](https://github.com/exislow/tidal-dl-ng) (404)  
 
 Rewritten from scratch in vanilla Javascript and turned into a simple web extension.  
 
-[Infos & Changelog](https://nicopr.fr/goodvibes)  
+[Infos & Changelogs](https://nicopr.fr/goodvibes)  
 
 Looking for [QobuzExt](https://github.com/nicopowa/qobuzext) ?  
 
@@ -19,11 +19,17 @@ Looking for [QobuzExt](https://github.com/nicopowa/qobuzext) ?
 
 ## How to install
 
-Clone repository, or download & extract archive.  
+
+### Choose one
+
+- Download latest release
+- Download code zip archive
+- Clone repository
 
 
 ### Chromium based browsers
 
+- Extract extension zip
 - Open Extensions tab
 - Enable **Developer mode**
 - Click **Load unpacked**
@@ -38,44 +44,61 @@ TidalExt is not published on AMO (addons.mozilla.org).
 Unsigned extensions can not be permanently installed on standard Firefox release.  
 
 
-#### Build extension
+#### Replace manifest
 
 - Delete `manifest.json`
 - Rename `manifest.firefox.json` to `manifest.json`
-- Open terminal in extension directory
-- Run this command :  
-	`tar -a -c -f tidalext.zip manifest.json *.html *.js common`
 
 
 #### Load extension temporarily (standard Firefox)
 
-- Type `about:debugging#/runtime/this-firefox` into the address bar and press Enter
+- Paste `about:debugging#/runtime/this-firefox` into the address bar and press Enter
 - Click **Load Temporary Add-on**
-- Select `tidalext.zip`
+- Browse extension directory
+- Select `manifest.json`
 
 
-#### Use a different Firefox edition
+#### Or use a different Firefox edition
 
 - Install Firefox [Developer](https://firefox.com/download/all/desktop-developer/) or [Nightly](https://firefox.com/download/all/desktop-nightly/)
-- Type `about:config` into the address bar and press Enter
+- Paste `about:config` into the address bar and press Enter
 - Accept the warning message
 - Search for `xpinstall.signatures.required`
 - Click the toggle button to set its value to **false**
-- Type `about:addons` into the address bar and press Enter
+- Open terminal in extension directory
+- Create extension zip package
+	- Windows  
+		```
+		tar -a -c -f tidalext.zip manifest.json *.html *.js common/*.js common/*.css
+		```
+	- Linux  
+		```
+		apt install zip
+		zip -r tidalext.zip manifest.json *.html *.js common -i "*.js" "*.css" "*.json" "*.html"
+		```
+- Paste `about:addons` into the address bar and press Enter
 - Click the cog button, then **Install Add-on From File**
 - Select `tidalext.zip`
 
 
-## Notes
+#### Notes
 
-- Massive glitch on Edge Windows 11 : extension becomes unresponsive, popup not showing, broken keyboard shortcut, extension takes forever to reload 
+- Increase this.parallel integer value in proc.dash.js (line 21) to speed up downloads, use at your own risks
 
-- Firefox does not support [Offscreen API](https://developer.chrome.com/docs/extensions/reference/api/offscreen), extension automatically falls back to [hidden tabs](https://developer.mozilla.org/docs/Mozilla/Add-ons/WebExtensions/API/tabs/hide).  
+- Error 401 token expired when downloading many tracks
 
-- AI was used for FLAC conversion (M4aProcessor class).  
+- Edge Windows 11 bug : popup not showing, broken keyboard shortcut, extension is unresponsive and takes forever to reload  
 
-- Tidal default settings do not provide complete metadata.  
-Enable "Audio metadata" in [Settings](https://tidal.com/settings) > Display
+- Edge error S6001 if DRM disabled in settings, non-blocking for TidalExt downloads  
+	`edge://settings/privacy/sitePermissions/allPermissions/protectedContent`
+
+- Firefox does not support [Offscreen API](https://developer.chrome.com/docs/extensions/reference/api/offscreen), extension automatically falls back to [hidden tabs](https://developer.mozilla.org/docs/Mozilla/Add-ons/WebExtensions/API/tabs/hide)  
+
+- AI was used for FLAC conversion (M4aProcessor class)  
+
+- Tidal default settings do not provide complete metadata, enable "Audio metadata" in [Settings](https://tidal.com/settings) > Display
+
+- Tidal throws error S6001 
 
 
 ## How to use
@@ -102,7 +125,7 @@ Enable "Audio metadata" in [Settings](https://tidal.com/settings) > Display
 
 - Check extensions page for errors
 - Press Alt+T to reload extension
-- [ToDo](notes.md)
+- [ToDo](TODO.md)
 - [ToDo++](common/TODO.md)
 
 

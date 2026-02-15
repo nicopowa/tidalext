@@ -1,12 +1,19 @@
-import { browse, action, DEBUG } from "./vars.js";
-import { Offscreen } from "./out.js";
-import { wait } from "./util.js";
+import {browse, action, DEBUG, Type} from "./vars.js";
+import {Core} from "./core.js";
+import {Offscreen} from "./out.js";
+import {Util, wait} from "./util.js";
 
-class Backstage {
+class Backstage extends Core {
 
 	constructor() {
 
-		console.log(this.manifest.name);
+		super();
+
+		if(DEBUG)
+			console.log(
+				Util.manifest.name,
+				"v" + Util.manifest.version
+			);
 
 		[
 			[browse.runtime.onStartup, this.startup],
@@ -14,8 +21,7 @@ class Backstage {
 			[browse.downloads.onChanged, this.downloadProgress],
 			[browse.commands.onCommand, this.handleCommand],
 			[browse.tabs.onUpdated, this.onTabUpdate],
-			[browse.tabs.onRemoved, this.onTabRemove],
-			[browse.runtime.onMessage, this.handleMessage]
+			[browse.tabs.onRemoved, this.onTabRemove]
 		].forEach(([api, cbk]) =>
 			api.addListener(cbk.bind(this)));
 
@@ -38,7 +44,7 @@ class Backstage {
 		this.queue = new Queue(this);
 
 		this.urlBase = ""; // service url
-		this.urlHost = this.manifest.host_permissions[0];
+		this.urlHost = Util.manifest.host_permissions[0];
 	
 	}
 
@@ -51,7 +57,7 @@ class Backstage {
 
 	}
 
-	liftoff() {
+	async liftoff() {
 
 		if(DEBUG)
 			console.log("lift off");
@@ -60,18 +66,12 @@ class Backstage {
 	
 	}
 
-	get manifest() {
-
-		return browse.runtime.getManifest();
-
-	}
-
 	update() {
 
 		if(DEBUG)
 			console.log("update check");
 
-		const manurl = this.manifest.homepage_url.replace(
+		const manurl = Util.manifest.homepage_url.replace(
 			"github.com",
 			"raw.githubusercontent.com"
 		) + "/refs/heads/main/manifest.json"
@@ -82,7 +82,7 @@ class Backstage {
 			res.json())
 		.then(man => {
 
-			if(+man.version > +this.manifest.version) {
+			if(+man.version > +Util.manifest.version) {
 
 				if(DEBUG)
 					console.log("update");
@@ -234,8 +234,8 @@ class Backstage {
 
 		if(DEBUG)
 			console.log(
-				"navigate",
 				tab.id,
+				"navigate",
 				info.url
 			);
 	
@@ -245,8 +245,8 @@ class Backstage {
 
 		if(DEBUG)
 			console.log(
-				"loading",
-				tab.id
+				tab.id,
+				"loading"
 			);
 
 		// injected code parses before tab update event
@@ -258,8 +258,8 @@ class Backstage {
 
 		if(DEBUG)
 			console.log(
-				"complete",
-				tab.id
+				tab.id,
+				"complete"
 			);
 
 	}
@@ -270,9 +270,8 @@ class Backstage {
 
 			if(DEBUG)
 				console.log(
-					"rm",
-					tabId
-					// info
+					tabId,
+					"removed"
 				);
 
 			this.medias.delete(tabId);
@@ -293,7 +292,7 @@ class Backstage {
 
 	async syncPopup() {
 
-		// no need check ?
+		// useless ?
 		if(!(await this.popped()))
 			return;
 
@@ -372,9 +371,11 @@ class Backstage {
 	
 	}
 
-	sameTab(tab, dat) {
+	mediaTab(tab) {
 
-		// from child classes
+		return this.medias.get(tab.id) || {
+			extype: "void"
+		};
 	
 	}
 
@@ -464,13 +465,13 @@ class Backstage {
 					this.trackDownload(
 						track,
 						quality,
-						mediaData.extype === "album" ? mediaData : null
+						mediaData.extype === Type.ALBUM ? mediaData : null
 					);
 				
 				}
 			
 			}
-			else if(mediaType === "album") {
+			else if(mediaType === Type.ALBUM) {
 
 				const album = await this.getRelease(mediaId);
 
@@ -487,7 +488,9 @@ class Backstage {
 			
 			}
 			// duplicated, same as album, merge both
-			else if(mediaType === "release") {
+			else if(mediaType === Type.RELEASE) {
+
+				console.warn("RELEASE");
 
 				const releaseData = await this.getRelease(mediaId);
 
@@ -504,7 +507,7 @@ class Backstage {
 					));
 
 			}
-			else if(mediaType === "playlist") {
+			else if(mediaType === Type.LIST) {
 
 				const trackList = this.trackList(mediaData);
 				
@@ -522,13 +525,9 @@ class Backstage {
 					));
 			
 			}
-			else if(mediaType === "artist") {
+			else if(mediaType === Type.ARTIST) {
 
-				const releases = this.getArtist(mediaData);
-
-				console.log(releases);
-
-				for(const rel of releases) {
+				for(const rel of mediaData.releases) {
 
 					const release = await this.getRelease(rel.id);
 
@@ -548,7 +547,7 @@ class Backstage {
 				}
 
 			}
-			else if(mediaType === "label") {
+			else if(mediaType === Type.LABEL) {
 
 				console.log("batch label");
 				console.log(mediaData);
@@ -557,7 +556,7 @@ class Backstage {
 			else {
 
 				this.handleError({
-					error: "invalid media type"
+					error: "invalid media type : " + mediaType
 				});
 			
 			}
@@ -637,25 +636,26 @@ class Backstage {
 	handleFetch(msg, tab) {
 
 		const {
-			url, hit, sts, dat, opt
+			url, hit, sts, dat
 		} = msg;
 
 		if(this.tracks.has(hit)) {
 
-			// if(DEBUG) console.log("hit", hit);
+			/*if(DEBUG)
+				console.log(
+					"hit",
+					hit,
+					sts,
+					dat
+				);*/
 
 			this.tracks.get(hit)(
 				tab,
-				dat,
-				opt
+				dat
 			);
 		
 		}
 	
-	}
-
-	getArtist(artist) {
-		// from child classes
 	}
 
 	async getRelease(releaseId) {
@@ -749,47 +749,30 @@ class Backstage {
 	
 	}
 
-	sanitize(name) {
+	/**
+	 * Hells Bells
+	 */
+	sanitize(str) {
 
-		return name
-		// win backslash to forward
-		.replace(
-			/\\/g,
-			"/"
-		)
-		// remove illegal chars          
-		.replace(
-			/[<>:"|?*\x00-\x1F]/g,
-			""
-		)
-		// remove dots/spaces at end of folder/file names
-		.replace(
-			/[. ]+([\/]|$)/g,
-			"$1"
-		)
-		// remove leading slash (fixes "drive root" error)
-		.replace(
-			/^\//,
-			""
-		)
-		// replace multiple spaces by single space
-		.replace(
-			/\s+/g,
-			" "
-		)
-		.trim();
-
-		return name
+		return str
 		.replace(
 			/[<>:"/\\|?*]/g,
 			"_"
 		)
+		.replaceAll(
+			"...",
+			""
+		)
+		.replace(
+			/\.$/g, // Notorious trailing dot
+			""
+		)
 		.replace(
 			/\s+/g,
 			" "
 		)
 		.trim();
-	
+
 	}
 
 	async downloadProgress(delta) {
@@ -833,9 +816,7 @@ class Icn {
 		this.textColor = "#FFFFFF";
 		this.backColor = "#6B7280";
 
-		this.letter = browse.runtime
-		.getManifest()
-		.name.slice(
+		this.letter = Util.manifest.name.slice(
 			0,
 			1
 		)
@@ -1024,7 +1005,22 @@ class Queue {
 
 	async processNext() {
 
-		if(!this.tasks.length) {
+		const done = this.tasks.findIndex(task =>
+			task.status === "ok");
+
+		if(done !== -1) {
+
+			this.tasks.splice(
+				done,
+				1
+			);
+		
+		}
+
+		const pending = this.tasks.filter(task =>
+			task.status !== "ok" && task.status !== "no");
+
+		if(!pending.length) {
 
 			await this.main.off.close();
 
@@ -1036,8 +1032,9 @@ class Queue {
 		
 		}
 
-		this.current = this.tasks[0];
+		this.current = pending[0];
 		this.current.status = "load";
+
 		this.main.sendQueue();
 
 		this.downloadTask(this.current);
@@ -1045,21 +1042,37 @@ class Queue {
 	}
 
 	async downloadTask(task) {
+		
+		//console.log("task", task);
 
-		if(DEBUG)
-			console.log(
-				"task",
-				task
-			);
+		if(!task.album) {
 
-		if(!task.album)
-			task.album = await this.main.getRelease(task.track.album.id);
+			try {
+
+				task.album = await this.main.getRelease(task.track.album.id);
+			
+			}
+			catch(err) {
+
+				console.error(err);
+
+				task.status = "no";
+				task.error = err;
+
+				this.processNext();
+
+				return;
+				
+			}
+		
+		}
 
 		task.file = this.main.getFilePath(
 			task.track,
 			task.album,
 			task.rules
 		);
+
 		task.meta = this.main.getMetaData(
 			task.track,
 			task.album
@@ -1080,11 +1093,12 @@ class Queue {
 
 	startDownload(dat, task) {
 
-		console.log(
-			"start download",
-			dat,
-			task
-		);
+		if(DEBUG)
+			console.log(
+				"download",
+				dat,
+				task
+			);
 
 		this.main.off.post({
 			type: "process",
@@ -1103,22 +1117,23 @@ class Queue {
 
 		if(msg.ok) {
 
-			const downloadId = await browse.downloads.download({
+			//console.log("save", this.current.file);
+
+			await browse.downloads.download({
 				url: msg.url,
 				filename: this.current.file,
 				conflictAction: "overwrite"
-			});
-
-			if(downloadId) {
+			})
+			.then(downloadId => {
 
 				this.blobs.set(
 					downloadId,
 					this.current.id
 				);
 
-				if(this.main.opt.downloadCovers) {
+				/*if(this.main.opt.downloadCovers) {
 
-					const downloadCoverId = await browse.downloads.download({
+					const downloadCoverId = browse.downloads.download({
 						url: msg.cvr,
 						filename: [...this.current.file.split("/")
 						.slice(
@@ -1131,26 +1146,30 @@ class Queue {
 						conflictAction: "overwrite"
 					});
 				
-				}
+				}*/
 
 				this.current.status = "ok";
-			
-			}
-			else {
 
-				if(browse.runtime.lastError) {
+			})
+			.catch(err => {
 
-					this.current.status = "error";
+				/*if(browse.runtime.lastError) {
+
+					this.current.status = "no";
 					this.current.error = browse.runtime.lastError.message;
 				
-				}
-			
-			}
+				}*/
+
+				this.current.status = "no";
+				this.current.error = this.current.file + "\n" + err;
+				console.error(this.current.error);
+
+			});
 		
 		}
 		else {
 
-			this.current.status = "error";
+			this.current.status = "no";
 			this.current.error = msg.error;
 		
 		}
@@ -1158,8 +1177,6 @@ class Queue {
 		this.main.sendQueue();
 
 		await wait();
-
-		this.tasks.shift();
 				
 		this.processNext();
 	

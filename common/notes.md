@@ -27,4 +27,4 @@
 # Ideas
 
 - Spotify is now lossless
-- Apple Music database is huge
+- AppleMusicExt

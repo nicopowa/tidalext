@@ -9,6 +9,8 @@
 	--gaps: 3px;
 	--pads: 4px;
 	--fade: 0.4;
+	--down: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLXdpZHRoPSIxLjI1Ij48cGF0aCBkPSJNMTIgMTdWM002IDExbDYgNiA2LTZNMTkgMjFINSIvPjwvc3ZnPg==");
+	--nope: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLXdpZHRoPSIxLjI1Ij48cGF0aCBkPSJNMTggNiA2IDE4TTYgNmwxMiAxMiIvPjwvc3ZnPg==");
 }
 
 @media (prefers-color-scheme: light) {
@@ -207,16 +209,6 @@ a {
 	object-fit: cover;
 }
 
-/*.album-info,
-.artist-info,
-.release-info,
-.playlist-info,
-.track-info {
-	flex: 1;
-	min-width: 0;
-	padding: var(--gaps);
-}*/
-
 .album-info,
 .artist-info,
 .release-info,
@@ -226,7 +218,6 @@ a {
 	display: flex;
 	flex-direction: column;
 	gap: calc(var(--gaps) / 2);
-	/*padding: var(--pads);*/
 	flex: 1;
 	min-width: 0;
 	padding: var(--gaps);
@@ -310,14 +301,13 @@ a {
 	mask-size: contain;
 	mask-repeat: no-repeat;
 	mask-position: center;
-	-webkit-mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLXdpZHRoPSIxLjI1Ij48cGF0aCBkPSJNMTIgMTdWM002IDExbDYgNiA2LTZNMTkgMjFINSIvPjwvc3ZnPg==");
+	-webkit-mask-image: var(--down)
 }
 
 .download-btn:disabled {
 	opacity: 0.3;
-	/* cursor: not-allowed; */
 	cursor: default;
-	-webkit-mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLXdpZHRoPSIxLjI1Ij48cGF0aCBkPSJNMTggNiA2IDE4TTYgNmwxMiAxMiIvPjwvc3ZnPg==");
+	-webkit-mask-image: var(--nope);
 }
 
 .album-download,
@@ -437,7 +427,7 @@ a {
 	color: var(--info);
 }
 
-.queued.fail {
+.queued.no {
 	color: var(--error);
 }
 

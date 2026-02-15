@@ -1,2 +1,4 @@
 *.zip
 test
+compile.js
+common/comp.js

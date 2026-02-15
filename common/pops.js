@@ -1,8 +1,11 @@
-import {browse, DEBUG} from "./vars.js";
+import {browse, DEBUG, Type} from "./vars.js";
+import {Core} from "./core.js";
 
-class BasePopup {
+class BasePopup extends Core {
 
 	constructor() {
+
+		super();
 
 		this.auth = false;
 		this.media = null;
@@ -19,8 +22,6 @@ class BasePopup {
 			() =>
 				this.save()
 		);
-
-		browse.runtime.onMessage.addListener(this.handleMessage.bind(this));
 
 		this.send("popup");
 
@@ -58,7 +59,7 @@ class BasePopup {
 
 		this.media = msg.media;
 
-		console.log(this.media);
+		//console.log("up", this.media);
 
 		this.setQuality(msg.settings.quality);
 
@@ -87,19 +88,19 @@ class BasePopup {
 
 			switch(this.media.extype) {
 
-				case "album":
+				case Type.ALBUM:
 					this.renderAlbum();
 					break;
-				case "artist":
+				case Type.ARTIST:
 					this.renderArtist();
 					break;
 				case "releases":
 					this.renderReleases();
 					break;
-				case "label":
+				case Type.LABEL:
 					this.renderLabel();
 					break;
-				case "playlist":
+				case Type.LIST:
 					this.renderPlaylist();
 					break;
 				// search results
@@ -208,10 +209,10 @@ class BasePopup {
 			this.syncPlease("load");
 		else if(msg.last)
 			this.syncPlease("swap");
-		else if(!msg.auth)
-			this.syncPlease("open");
+		//else if(!msg.auth)
 		else
-			console.log("nope");
+			this.syncPlease("open");
+		//else console.log("nope");
 
 		if(msg.next)
 			this.elements.musicext.classList.add("next");
