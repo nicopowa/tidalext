@@ -1,14 +1,31 @@
-import { browse, DEBUG } from "./vars.js";
+import { browse, Dats } from "./vars.js";
+import { Datx } from "../popped.js";
 
 class Core {
 
 	constructor() {
 
+		/** @type {?} */
+		this.store = new Stor({
+			...Dats,
+			...Datx
+		});
+
 		browse.runtime.onMessage.addListener(this.handleMessage.bind(this));
-	
+
 	}
 
-	handleMessage(msg) {
+	async liftoff() {
+
+		await this.store.init(this.storeUpdated.bind(this));
+
+	}
+
+	handleMessage(msg, src) {
+		
+	}
+
+	storeUpdated() {
 		
 	}
 
@@ -20,41 +37,64 @@ class Stor {
 
 		this._map = mapping;
 		this._cache = {};
+		this._syncd = null;
 
-		for(const prop in mapping) {
-
-			const key = mapping[prop];
+		Object.entries(this._map)
+		.forEach(([key, val]) => {
 
 			Object.defineProperty(
 				this,
-				prop,
+				key,
 				{
-					get: () =>
-						this._cache[key],
+					get: () => {
 
-					set: val => {
+						return this._cache[key];
+					
+					},
+					set: v => {
 
-						this._cache[key] = val;
+						this._cache[key] = v;
+
 						browse.storage.local.set({
-							[key]: val
+							[val]: v
 						});
 					
 					}
 				}
 			);
-		
-		}
+
+		});
 	
 	}
 
-	async init() {
+	async init(syncd) {
 
-		const keys = Object.values(this._map);
-		const itms = await browse.storage.local.get(keys);
+		this._syncd = syncd || (() => {});
 
-		this._cache = itms;
+		await this.sync();
+
+		browse.storage.onChanged.addListener(this.sync.bind(this));
 
 		return this;
+	
+	}
+
+	sync(evt = {}) {
+
+		return browse.storage.local
+		.get(Object.values(this._map))
+		.then(vals =>
+			Object.entries(this._map)
+			.forEach(([key, val]) =>
+				(this._cache[key] = vals[val])))
+		.then(() =>
+			this._syncd());
+	
+	}
+
+	get data() {
+
+		return this._cache;
 	
 	}
 

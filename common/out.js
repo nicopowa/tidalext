@@ -1,4 +1,4 @@
-import {browse} from "./vars.js";
+import {browse, DEBUG} from "./vars.js";
 
 const Mode = {
 	OFFSCREEN: 0,
@@ -14,6 +14,18 @@ class Offscreen {
 
 	}
 
+	async ensure(url) {
+
+		if(DEBUG)
+			console.log("off open");
+
+		if(browse.offscreen)
+			await this.ensureOffscreen(url);
+		else
+			await this.ensureHiddenTab(url);
+
+	}
+
 	async ensureOffscreen(url) {
 
 		const contexts = await browse.runtime.getContexts({
@@ -25,7 +37,7 @@ class Offscreen {
 			await browse.offscreen.createDocument({
 				url: browse.runtime.getURL(url),
 				reasons: ["BLOBS"],
-				justification: "no more"
+				justification: "NONE"
 			});
 		
 		}
@@ -66,28 +78,22 @@ class Offscreen {
 	
 	}
 
-	async ensure(url) {
-
-		if(browse.offscreen && browse.runtime.getContexts)
-			await this.ensureOffscreen(url);
-		else
-			await this.ensureHiddenTab(url);
-
-	}
-
-	async post(message) {
+	async post(msg) {
 
 		if(this.mode === Mode.OFFSCREEN)
-			browse.runtime.sendMessage(message);
+			browse.runtime.sendMessage(msg);
 		else if(this.mode === Mode.HIDDENTAB)
 			browse.tabs.sendMessage(
 				this.tabId,
-				message
+				msg
 			);
 
 	}
 
 	async close() {
+
+		if(DEBUG)
+			console.log("off kill");
 
 		if(this.mode === Mode.OFFSCREEN)
 			await browse.offscreen.closeDocument();

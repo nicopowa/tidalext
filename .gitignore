@@ -1,4 +1,4 @@
-*.zip
-test
-compile.js
+dist
+ext.js
 common/comp.js
+atmos.session.js

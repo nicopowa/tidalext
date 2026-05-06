@@ -11,20 +11,23 @@
 [Storage](https://developer.chrome.com/docs/extensions/reference/api/storage)  
 [Offscreen](https://developer.chrome.com/docs/extensions/reference/api/offscreen)  
 [Downloads](https://developer.chrome.com/docs/extensions/reference/api/downloads)  
-
-# Requests
-
+[SidePanel](https://developer.chrome.com/docs/extensions/reference/api/sidePanel)  
 [DeclarativeContent](https://developer.chrome.com/docs/extensions/reference/api/declarativeContent#type-RequestContentScript)  
 [WebRequest](https://developer.mozilla.org/docs/Mozilla/Add-ons/WebExtensions/API/webRequest)  
 [StreamFilter](https://developer.mozilla.org/docs/Mozilla/Add-ons/WebExtensions/API/webRequest/StreamFilter) (not available in chrome)  
+[CORS](https://developer.chrome.com/docs/extensions/develop/concepts/network-requests)  
 
-# Firefox
+### Firefox
 
 [BrowserSpecificSettings](https://developer.mozilla.org/docs/Mozilla/Add-ons/WebExtensions/manifest.json/browser_specific_settings)  
 [WebExt](https://extensionworkshop.com/documentation/develop/web-ext-command-reference)  
 
+# Metatags
+
+https://wiki.hydrogenaudio.org/index.php?title=Tag_Mapping
 
 # Ideas
 
 - Spotify is now lossless
 - AppleMusicExt
+- DRM ...

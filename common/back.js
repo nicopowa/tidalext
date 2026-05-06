@@ -1,7 +1,9 @@
-import {browse, action, DEBUG, Type} from "./vars.js";
+import {browse, action, DEV, DEBUG, Msg, Cfgs, Opts, Dats, Stat} from "./vars.js";
 import {Core} from "./core.js";
+//import {Disk} from "./disk.js";
 import {Offscreen} from "./out.js";
-import {Util, wait} from "./util.js";
+import {Util} from "./util.js";
+import {Root, Cfgx, Optx, Datx, Types, Typex, Jacks, Parse, Help, Urls} from "../popped.js";
 
 class Backstage extends Core {
 
@@ -9,73 +11,168 @@ class Backstage extends Core {
 
 		super();
 
+		this.apiBase = "";
+
 		if(DEBUG)
 			console.log(
 				Util.manifest.name,
-				"v" + Util.manifest.version
+				Util.manifest.version
 			);
 
 		[
-			[browse.runtime.onStartup, this.startup],
-			[browse.runtime.onInstalled, this.liftoff],
-			[browse.downloads.onChanged, this.downloadProgress],
-			[browse.commands.onCommand, this.handleCommand],
-			[browse.tabs.onUpdated, this.onTabUpdate],
+			//[browse.runtime.onStartup, this.started],
+			//[browse.runtime.onInstalled, this.installed],
+			//[browse.runtime.onSuspend, this.suspended],
+			[browse.runtime.onConnect, this.connected],
+			[browse.downloads.onChanged, this.downloaded],
+			...(DEBUG ? [[browse.commands.onCommand, this.commanded]] : []),
+			//[browse.tabs.onUpdated, this.onTabUpdate],
 			[browse.tabs.onRemoved, this.onTabRemove]
-		].forEach(([api, cbk]) =>
-			api.addListener(cbk.bind(this)));
-
-		this.opt = {
-			downloadCovers: false
-		};
-
-		this.dat = {
-			auth: false,
-			next: false
-		};
+		].forEach(([ext, cbk]) =>
+			ext.addListener(cbk.bind(this)));
 
 		this.medias = new Map();
-		this.tracks = new Map();
 		this.icon = new Icn();
-		this.quality = ""; // default quality
+
+		// update available
+		this.nxt = false;
 
 		this.off = new Offscreen();
 
 		this.queue = new Queue(this);
 
-		this.urlBase = ""; // service url
+		this.urlBase = Util.manifest.content_scripts[0].matches[0].slice(
+			0,
+			-1
+		);
+
 		this.urlHost = Util.manifest.host_permissions[0];
+		
+	}
+
+	started() {
+
+		if(DEBUG)
+			console.log("started");
+
+	}
+
+	installed() {
+
+		if(DEBUG)
+			console.log("installed");
+
+	}
+
+	suspended() {
+
+		if(DEBUG)
+			console.log("suspended");
 	
 	}
 
-	startup() {
+	commanded(cmd) {
 
-		if(DEBUG)
-			console.log("startup");
-
-		this.update();
-
+		if(cmd === "reload")
+			browse.runtime.reload();
+	
 	}
 
+	/**
+	 * @override
+	 */
 	async liftoff() {
 
+		await super.liftoff();
+
+		await this.storeCheck();
+
+		this.updateCheck();
+
+		await this.off.ensure((DEV ? "common/" : "") + "off.html");
+		
 		if(DEBUG)
 			console.log("lift off");
-		// browser startup || extension installed
+
+		Object.entries(Jacks)
+		.forEach(([hi, jack]) =>
+			(jack.typ = hi));
+
+		this.preqs(...Object.values(Jacks)
+		.map(jack =>
+			this.apiBase + jack.hit + "*"));
+
 		// this.icon.back("#ff8c00");
 	
 	}
 
-	update() {
+	async storeCheck() {
+
+		if(DEBUG)
+			console.log("init storage");
+
+		const dats = {
+			...Dats,
+			...Datx
+		};
+
+		const opts = Util.deep(
+			Opts,
+			Optx
+		);
+
+		Object.entries(dats)
+		.forEach(([key, val]) => {
+
+			if(typeof this.store[key] === "undefined") {
+
+				if(DEBUG)
+					console.log(
+						"default",
+						val
+					);
+
+				if(opts[val]) {
+
+					const cfg = opts[val];
+
+					this.store[key] = cfg.vals[cfg.defs];
+
+				}
+				else {
+
+					this.store[key] = "";
+				
+				}
+
+			}
+
+		});
+	
+	}
+
+	updateCheck() {
+
+		const now = Date.now();
+		const lst = this.store.lastup;
+
+		if(now - lst < 86400 * 1000) {
+
+			if(DEBUG)
+				console.log("update later");
+
+			return;
+
+		}
 
 		if(DEBUG)
 			console.log("update check");
 
 		const manurl = Util.manifest.homepage_url.replace(
-			"github.com",
-			"raw.githubusercontent.com"
+			"github",
+			"raw.githubusercontent"
 		) + "/refs/heads/main/manifest.json"
-		+ "?t=" + Date.now(); // useless ?
+		+ "?t=" + now; // useless ?
 
 		fetch(manurl)
 		.then(res =>
@@ -85,57 +182,99 @@ class Backstage extends Core {
 			if(+man.version > +Util.manifest.version) {
 
 				if(DEBUG)
-					console.log("update");
+					console.log("update available");
 
-				this.dat.next = true;
+				this.nxt = true;
 			
 			}
+			else if(DEBUG) {
+
+				console.log("up to date");
+			
+			}
+
+			this.store.lastup = now;
 		
 		})
-		.catch(() => {
+		.catch(err => {
 			
-			console.error("update fail"); // silent fail
-			// this.handleError({ error: err });
+			/*console.error(
+				"update error",
+				err
+			);*/
+			
+			this.handleError({
+				error: err
+			});
 		
 		});
 
 	}
 
-	watch(matches) {
+	preqs(...matches) {
 
-		Object.entries(matches)
-		.forEach(([url, cbk]) =>
-			this.tracks.set(
-				url,
-				cbk.bind(this)
-			));
+		browse.webRequest.onBeforeRequest.addListener(
+			this.preqsup.bind(this),
+			{
+				urls: matches,
+				types: ["xmlhttprequest"]
+			},
+			[
+				"requestBody"
+			]
+		);
 	
+	}
+
+	preqsup(evt) {
+
+		//console.log(evt);
+
+		const jack = Object.values(Jacks)
+		.find(jack =>
+			new RegExp(jack.hit)
+			.test(evt.url));
+
+		if(jack) {
+
+			if(DEBUG)
+				console.log(
+					"req",
+					jack.nnm
+				);
+
+			this.icon.reset();
+		
+		}
+
 	}
 
 	heads(...matches) {
 
 		browse.webRequest.onBeforeSendHeaders.addListener(
-			this.heading.bind(this),
+			this.headsup.bind(this),
 			{
-				urls: matches
+				urls: matches,
+				types: ["xmlhttprequest"]
 			},
 			["requestHeaders"]
 		);
 	
 	}
 
-	heading(evt) {
-		// handle request headers
+	headsup(evt) {
+
 		// from child classes
+	
 	}
 
-	send(type, data) {
+	send(typ, dat) {
 
 		//if(DEBUG) console.log("back >>", type, data);
 
-		return browse.runtime.sendMessage({
-			type: type,
-			...data
+		browse.runtime.sendMessage({
+			type: typ,
+			...dat
 		});
 	
 	}
@@ -144,53 +283,96 @@ class Backstage extends Core {
 
 		if(DEBUG)
 			console.log("ready");
-
-		// this.syncPopup();
 	
 	}
 
-	async handleMessage(msg, src) {
+	connected(port) {
+
+		if(DEBUG)
+			console.log(
+				"connect",
+				port.sender.tab.id
+			);
+
+		port.postMessage({
+			"confs": {
+				...Cfgs,
+				...Cfgx
+			},
+			"jacks": Object.values(Jacks)
+			.map(jack =>
+				({
+					"typ": jack.typ,
+					"hit": jack.hit
+				}))
+		});
+	
+	}
+
+	/**
+	 * @override
+	 */
+	handleMessage(msg, src) {
 
 		// if(DEBUG) console.log(msg);
 
+		// simple object + binds and whatMessage[msg.type].bind(this)(msg); // ?
+
 		switch(msg.type) {
 
-			case "process":
-				browse.runtime.sendMessage(msg);
-				break;
-
-			case "complete":
-				this.queue.handleStreamComplete(msg);
-				break;
-
-			case "progress":
+			case Msg.PROGRESS:
 				this.handleProgress(msg);
 				break;
 
-			case "popup":
-				this.syncPopup();
+			case Msg.COMPLETE:
+				this.queue.handleStreamComplete(msg);
 				break;
 
-			case "link":
-				this.handleLink(msg);
-				break;
-
-			case "fetch":
+			case Msg.FETCH:
 				this.handleFetch(
 					msg,
 					src.tab
 				);
 				break;
 
-			case "save":
-				await this.saveSettings(msg);
+			case Msg.POPUP:
+				this.syncPopup();
 				break;
 
-			case "download":
-				await this.handleDownload(msg);
+			case Msg.LINK:
+				this.handleLink(msg);
 				break;
 
-			case "error":
+			case Msg.DOWNLOAD:
+				this.handleDownload(msg);
+				break;
+
+			case Msg.TOGGLE:
+				this.queue.paused = !this.queue.paused;
+
+				if(!this.queue.paused)
+					this.queue.process();
+
+				this.syncPopup();
+				break;
+
+			case Msg.CANCEL:
+				this.queue.removeItem(msg.id);
+				break;
+
+			case Msg.CLICKED:
+				this.handleClick(msg);
+				break;
+
+			case Msg.STORE:
+				this.handleStore(msg);
+				break;
+
+			case Msg.STATE:
+				this.handleState(msg);
+				break;
+
+			case Msg.ERROR:
 				this.handleError(msg);
 				break;
 		
@@ -198,14 +380,7 @@ class Backstage extends Core {
 	
 	}
 
-	handleCommand(cmd) {
-
-		if(cmd === "reload")
-			browse.runtime.reload();
-	
-	}
-
-	onTabUpdate(tabId, info, tab) {
+	/*onTabUpdate(tabId, info, tab) {
 
 		if(!tab.url) // blank
 			return;
@@ -262,7 +437,7 @@ class Backstage extends Core {
 				"complete"
 			);
 
-	}
+	}*/
 
 	onTabRemove(tabId, info) {
 
@@ -290,9 +465,14 @@ class Backstage extends Core {
 	
 	}
 
+	/*async showPopup() {
+
+		await action.openPopup();
+	
+	}*/
+
 	async syncPopup() {
 
-		// useless ?
 		if(!(await this.popped()))
 			return;
 
@@ -302,25 +482,33 @@ class Backstage extends Core {
 		const lst = await this.lastTab();
 		const tab = cur || lst;
 
-		await this.send(
-			"sync",
+		this.send(
+			Msg.SYNC,
 			{
-				auth: this.dat.auth,
-				next: this.dat.next,
+				tabid: tab?.id || 0,
+
+				next: this.nxt,
 
 				actv: tab?.active,
 				last: !!lst,
-							
-				settings: await browse.storage.local.get([
-					"quality"
-					// ... more settings
-				]),
 
-				media: this.medias.get(tab?.id) || null
+				media: this.medias.get(tab?.id) || null,
+
+				queuePaused: this.queue.paused,
+
+				queue: this.queue.tasks
+				.filter(t =>
+					t.sts !== Stat.DONE)
+				.map(t =>
+					({
+						id: t.id,
+						infos: t.infos,
+						progress: t.progress,
+						sts: t.sts,
+						error: t.error
+					}))
 			}
 		);
-
-		await this.sendQueue();
 	
 	}
 
@@ -347,7 +535,8 @@ class Backstage extends Core {
 
 		const [last] = await browse.tabs.query({
 			url: [this.urlHost],
-			lastFocusedWindow: true
+			lastFocusedWindow: true,
+			windowType: "normal"
 		});
 
 		return last;
@@ -374,14 +563,8 @@ class Backstage extends Core {
 	mediaTab(tab) {
 
 		return this.medias.get(tab.id) || {
-			extype: "void"
+			extype: Types.VOID
 		};
-	
-	}
-
-	async getSetting(key) {
-
-		return (await browse.storage.local.get(key))[key];
 	
 	}
 
@@ -394,6 +577,8 @@ class Backstage extends Core {
 			case "open":
 				tab = await this.newTab(this.urlBase);
 
+				//if(tab) await this.showPopup(); // firefox says no
+
 				break;
 
 			case "swap":
@@ -404,7 +589,9 @@ class Backstage extends Core {
 					await this.focusTab(tab);
 
 					await this.reloadTab(tab);
-				
+
+					//await this.showPopup(); // same
+
 				}
 
 				break;
@@ -429,15 +616,14 @@ class Backstage extends Core {
 				mediaType, mediaId
 			} = msg;
 
-			const quality = (await this.getSetting("quality")) || this.quality;
+			const tab = await this.lastTab();
 
-			const tab = await this.curTab();
+			if(!tab || !this.medias.has(tab.id)) {
 
-			if(!this.medias.has(tab.id)) {
-
-				console.log("nope");
-
-				return;
+				// ditch tab checking ? got all the data
+				return this.handleError({
+					error: "tab lost"
+				});
 			
 			}
 
@@ -448,11 +634,10 @@ class Backstage extends Core {
 					"download",
 					mediaType,
 					mediaId,
-					mediaData,
-					quality
+					mediaData
 				);
 
-			if(mediaType === "track") {
+			if(mediaType === Types.TRACK) {
 
 				const track = this.trackList(mediaData)
 				.find(
@@ -464,99 +649,54 @@ class Backstage extends Core {
 
 					this.trackDownload(
 						track,
-						quality,
-						mediaData.extype === Type.ALBUM ? mediaData : null
+						mediaData.extype === Types.ALBUM ? mediaData : null
 					);
 				
 				}
 			
 			}
-			else if(mediaType === Type.ALBUM) {
+			else if(mediaType === Types.ALBUM) {
 
-				const album = await this.getRelease(mediaId);
-
-				const coverBlob = await this.getCover(this.getCoverUrl(album));
-
-				this.trackList(mediaData)
-				.forEach(track =>
-					this.trackDownload(
-						track,
-						quality,
-						album,
-						coverBlob
-					));
+				this.handleRelease(mediaId);
 			
 			}
-			// duplicated, same as album, merge both
-			else if(mediaType === Type.RELEASE) {
+			else if(mediaType === Types.PLAYLIST || mediaType === Types.FAV_TRACKS || mediaType === Types.MIX) {
 
-				console.warn("RELEASE");
-
-				const releaseData = await this.getRelease(mediaId);
-
-				const coverBlob = await this.getCover(this.getCoverUrl(releaseData));
-
-				const trackList = this.trackList(releaseData);
-
-				trackList.forEach(track =>
+				this.trackList(mediaData)
+				.forEach((track, indx) =>
 					this.trackDownload(
 						track,
-						quality,
-						releaseData,
-						coverBlob
-					));
-
-			}
-			else if(mediaType === Type.LIST) {
-
-				const trackList = this.trackList(mediaData);
-				
-				trackList.forEach((track, index) =>
-					this.trackDownload(
-						track,
-						quality,
 						null,
 						null,
 						{
 							list: true,
-							...this.playlistInfos(mediaData),
-							indx: index + 1
+							...this.listRules(mediaData),
+							indx: indx + 1,
+							...(mediaType === Types.FAV_TRACKS ? {
+								title: "_TRACKS",
+								indx: 0
+							} : {})
 						}
 					));
 			
 			}
-			else if(mediaType === Type.ARTIST) {
+			else if(mediaType === Types.ARTIST || mediaType === Types.FAV_ALBUMS || mediaType === Types.LABEL) {
 
-				for(const rel of mediaData.releases) {
+				// horrible
+				// download queue types, getRelease & getCover later 
+				for(const rel of mediaData.lst) {
 
-					const release = await this.getRelease(rel.id);
+					await this.handleRelease(rel.id);
 
-					const coverBlob = await this.getCover(this.getCoverUrl(release));
-
-					this.trackList(release)
-					.forEach(track =>
-						this.trackDownload(
-							track,
-							quality,
-							release,
-							coverBlob
-						));
-
-					await wait();
+					await Util.wait(this.store.delays);
 
 				}
-
-			}
-			else if(mediaType === Type.LABEL) {
-
-				console.log("batch label");
-				console.log(mediaData);
 
 			}
 			else {
 
 				this.handleError({
-					error: "invalid media type : " + mediaType
+					error: "unhandled : " + mediaType
 				});
 			
 			}
@@ -564,105 +704,298 @@ class Backstage extends Core {
 		}
 		catch(err) {
 
-			this.handleError({
-				error: err
-			});
+			this.handleError(err);
 		
 		}
+	
+	}
+
+	async handleClick(msg) {
+
+		if(DEBUG)
+			console.log(
+				"clicked",
+				msg.mediaType,
+				msg.mediaId
+			);
+
+		const whereTo = Urls[msg.mediaType]?.replace(
+			"{id}",
+			msg.mediaId
+		);
+
+		if(whereTo) {
+
+			const thisWay = Root + whereTo;
+
+			const tab = await this.curTab();
+
+			if(tab) {
+
+				await browse.tabs.update(
+					tab.id,
+					{
+						url: thisWay
+					}
+				);
+			
+			}
+			else {
+
+				await this.newTab(thisWay);
+			
+			}
+
+		}
+	
+	}
+
+	async handleRelease(releaseId) {
+
+		const datas = await this.getRelease(releaseId);
+
+		const brain = this.store.brainz ? await this.musicBrainz(datas.upc) : {};
+
+		if(DEBUG)
+			console.log(brain);
+
+		const coverBlob = await this.getCover(Help.cover(
+			datas,
+			this.store.art_size
+		));
+
+		this.trackList(datas)
+		.forEach((track, indx) =>
+			this.trackDownload(
+				track,
+				datas,
+				coverBlob,
+				{
+					art: this.store.artwork && !indx,
+					...this.trackRules(track)
+				},
+				brain?.media?.tracks?.[indx]
+			));
+
+	}
+
+	handleStore(msg) {
+		//console.log("STORE", msg.data);
+	}
+
+	handleState(msg) {
+
+		// popstate
+
+		if(DEBUG)
+			console.log(
+				"state",
+				msg.data
+			);
+
+		// invalidate link
+		// clear current media
 	
 	}
 
 	async handleError(msg) {
 
-		console.error(msg?.error || msg || "error");
+		const err = msg?.error || msg || "error";
+
+		console.error(err);
 
 		this.icon.text("#ef4444");
 
-		try {
+		if(!(await this.popped()))
+			return;
 
-			if(await this.popped()) {
-
-				await this.send(
-					"error",
-					{
-						error: msg.error
-					}
-				);
-			
+		this.send(
+			Msg.ERROR,
+			{
+				error: err
 			}
-		
-		}
-		catch(err) {
-
-			throw new Error(msg.error);
-		
-		}
+		);
 	
 	}
 
 	handleProgress(msg) {
 
-		this.icon.progress(msg.progress);
+		const queueItem = this.queue.tasks.find(itm =>
+			itm.id === msg.id);
+
+		if(queueItem) {
+
+			const prg = msg.progress;
+
+			queueItem.progress = prg;
+
+			if(this.store.icon) {
+
+				this.icon.prog(
+					msg.id,
+					prg
+				);
+			
+			}
+		
+		}
 	
 	}
 
-	async sendQueue() {
+	musicBrainz(upc) {
 
-		if(await this.popped())
-			await this.send(
-				"queue",
-				{
-					items: this.queue.tasks.map(t =>
-						({
-							// ...t // x)
-							id: t.id,
-							infos: t.infos,
-							progress: t.progress,
-							status: t.status,
-							error: t.error
-						}))
-				}
+		if(DEBUG)
+			console.log(
+				"MusicBrainz",
+				upc
 			);
+
+		if(!upc) {
+
+			return null;
+		
+		}
+
+		const brainzEndpoint = "https://musicbrainz.org/ws/2/release/";
+
+		return fetch(`${brainzEndpoint}?query=barcode:${upc}&fmt=json`)
+		.then(res =>
+			res.json())
+		.then(res => {
+
+			const ults = res["releases"];
+
+			if(ults.length)
+				return fetch(`${brainzEndpoint}${ults.id}?inc=recordings&fmt=json`)
+				.then(res =>
+					res.json());
+
+			return null;
+		
+		})
+		/*.then(res => {
+
+			return res;
+		
+		})*/
+		.catch(err => {
+			
+			/*console.error(
+				"update error",
+				err
+			);*/
+			
+			/*this.handleError({
+				error: err
+			});*/
+
+			return null;
+		
+		});
 	
+	}
+
+	syncQueue(t) {
+
+		this.send(
+			Msg.QUEUE,
+			{
+				id: t.id,
+				infos: t.infos,
+				progress: t.progress,
+				sts: t.sts,
+				error: t.error
+			}
+		);
+
 	}
 
 	mediaHint() {
 
-		//this.icon.temp("#3b89f6");
-		this.icon.back("#3b89f6");
+		//this.icon.temp("#8EAAEF");
+		this.icon.back("#557ad9");
 	
 	}
 
+	/**
+	 * @param {Fetched} msg : 
+	 */
 	handleFetch(msg, tab) {
 
+		//console.log(msg);
+
 		const {
-			url, hit, sts, dat
+			typ, url, hit, sts, dat
 		} = msg;
 
-		if(this.tracks.has(hit)) {
+		try {
 
-			/*if(DEBUG)
+			const jack = Jacks[typ];
+
+			if(DEBUG)
 				console.log(
 					"hit",
-					hit,
-					sts,
+					//typ,
+					jack.nnm,
+					//sts,
+					//url, 
+					//hit,
 					dat
-				);*/
+				);
 
-			this.tracks.get(hit)(
-				tab,
+			const jacked = Parse[typ](
+				dat,
+				this.mediaTab(tab),
+				this
+			);
+
+			if(!Typex.includes(typ) && jacked) {
+
+				this.medias.set(
+					tab.id,
+					jacked
+				);
+
+				if(DEBUG)
+					console.log(
+						//tab.url,
+						jacked.extype,
+						jacked
+					);
+
+				this.syncPopup();
+
+				this.mediaHint();
+
+			}
+		
+		}
+		catch(err) {
+
+			console.log("jack error");
+			console.log(
+				typ,
+				url,
+				sts,
+				hit,
 				dat
 			);
+			throw err;
 		
 		}
 	
 	}
 
 	async getRelease(releaseId) {
-		// api calls from child classes
+
+		// child classes
+		return {};
+	
 	}
 
 	async getCover(coverUrl) {
+
+		//if(DEBUG) console.log("get cover");
 
 		const coverDat = await fetch(coverUrl);
 		const coverBlob = await coverDat.blob();
@@ -675,38 +1008,45 @@ class Backstage extends Core {
 	
 	}
 
-	getTrackUrl(track, quality) {
+	getTrackUrl(task) {
 
-		//if(DEBUG) console.log("track url", track, quality);
+		// child classes
+		return Promise.resolve();
 	
 	}
 
-	getCoverUrl(media) {
-		// child classes
-	}
-
 	getFilePath(track, album, rules) {
+
 		// child classes
+		return "";
+	
 	}
 
-	getMetaData(track, album) {
+	getMetaData(track, album, brain = {}) {
+
 		// child classes
+		return {};
+	
 	}
 
-	trackDownload(track, quality, album = null, cover = null, rules = null) {
+	trackDownload(track, album = null, cover = null, rules = {}, brain = {}) {
 
 		this.queue.add({
-			id: `${track.id}_${Date.now()}`,
+			id: track.id,
 			track: track,
 			infos: this.getTrackInfos(track),
-			quality: quality,
-			status: "wait",
+			quality: this.store.quality,
+			sts: Stat.WAIT,
 			progress: 0,
 			album: album,
 			file: null,
 			meta: null,
 			cover: cover,
-			rules: rules,
+			rules: {
+				...rules,
+				...this.trackRules(track)
+			},
+			brain: brain,
 			error: null
 		});
 	
@@ -719,7 +1059,14 @@ class Backstage extends Core {
 	
 	}
 
-	playlistInfos(list) {
+	trackRules(track) {
+
+		// child classes
+		return {};
+	
+	}
+
+	listRules(media) {
 
 		// child classes
 		return {};
@@ -733,29 +1080,24 @@ class Backstage extends Core {
 	
 	}
 
+	// same
 	trackTitle(track) {
 
-		return `${track.title}${track.version ? ` (${track.version})` : ""}`
-		.replaceAll(
-			"/",
-			"-"
-		);
+		return `${track.title}${track.version ? ` (${track.version})` : ""}`;
 	
 	}
 
+	// same
 	albumTitle(album) {
 
 		return `${album.title}${album.version ? ` (${album.version})` : ""}`;
 	
 	}
 
-	/**
-	 * Hells Bells
-	 */
 	sanitize(str) {
 
 		return str
-		.replace(
+		.replace( // Hells Bells
 			/[<>:"/\\|?*]/g,
 			"_"
 		)
@@ -763,8 +1105,8 @@ class Backstage extends Core {
 			"...",
 			""
 		)
-		.replace(
-			/\.$/g, // Notorious trailing dot
+		.replace( // Notorious dot
+			/\.$/g,
 			""
 		)
 		.replace(
@@ -775,21 +1117,24 @@ class Backstage extends Core {
 
 	}
 
-	async downloadProgress(delta) {
+	async downloaded(delta) {
 
 		if(this.queue.blobs.has(delta.id)) {
+
+			//console.log(delta);
 
 			if(delta?.state?.current === "complete") {
 
 				// if(DEBUG) console.log("downloaded", delta.id);
 
-				this.icon.reset();
+				const taskId = this.queue.blobs.get(delta.id);
 
-				//await
+				this.icon.clearProg(taskId);
+
 				this.send(
-					"clear",
+					Msg.CLEAR,
 					{
-						id: this.queue.blobs.get(delta.id)
+						id: taskId
 					}
 				);
 
@@ -801,12 +1146,280 @@ class Backstage extends Core {
 	
 	}
 
-	async saveSettings(msg) {
+}
 
-		await browse.storage.local.set(msg.settings);
+class Queue {
+ 
+	/**
+	 * @param {!Backstage} main
+	 */
+	constructor(main) {
+ 
+		this.main = main;
+		this.tasks = [];
+		this.blobs = new Map();
+		this.paused = false;
+	
+	}
+ 
+	get parallel() {
+ 
+		return Math.max(
+			1,
+			+this.main.store.parallel || 1
+		);
+	
+	}
+ 
+	get active() {
+ 
+		return this.tasks.filter(t =>
+			t.sts === Stat.LOAD).length;
+	
+	}
+ 
+	add(task) {
+ 
+		if(this.tasks.some(tsk =>
+			tsk.id === task.id)) {
+ 
+			// send warning to popup ?
+			if(DEBUG)
+				console.log("already in queue");
+ 
+			return;
+		
+		}
+ 
+		this.tasks.push(task);
+		this.main.syncQueue(task);
+		this.process();
+	
+	}
+ 
+	process() {
+ 
+		for(let i = this.tasks.length - 1; i >= 0; i--) {
+ 
+			if(this.tasks[i].sts === Stat.DONE)
+				this.tasks.splice(
+					i,
+					1
+				);
+		
+		}
+
+		if(this.paused)
+			return;
+ 
+		while(this.active < this.parallel) {
+ 
+			const next = this.tasks.find(t =>
+				t.sts === Stat.WAIT);
+ 
+			if(!next)
+				break;
+ 
+			next.sts = Stat.LOAD;
+			this.main.syncQueue(next);
+			this.downloadTask(next);
+		
+		}
 	
 	}
 
+	removeItem(id) {
+
+		const idx = this.tasks.findIndex(t =>
+			t.id === id);
+
+		if(idx > -1) {
+
+			if(DEBUG)
+				console.log(
+					"cancel",
+					id
+				);
+
+			this.tasks.splice(
+				idx,
+				1
+			);
+
+			this.main.icon.clearProg(id);
+
+			this.process();
+
+		}
+
+	}
+ 
+	async downloadTask(task) {
+		
+		//console.log("task", task);
+ 
+		// no album data from playlist
+		if(!task.album) {
+ 
+			try {
+ 
+				task.album = await this.main.getRelease(task.track.album.id);
+				// task.brain
+			
+			}
+			catch(err) {
+ 
+				task.sts = Stat.FAIL;
+				task.error = err;
+ 
+				this.main.handleError(err);
+ 
+				this.process();
+ 
+				return;
+				
+			}
+		
+		}
+ 
+		task.file = this.main.getFilePath(
+			task.track,
+			task.album,
+			task.rules
+		);
+ 
+		task.meta = this.main.getMetaData(
+			task.track,
+			task.album,
+			task.brain
+		);
+ 
+		if(!task.cover)
+			task.cover = await this.main.getCover(Help.cover(
+				task.album,
+				this.main.store.art_size
+			));
+ 
+		const dat = await this.main.getTrackUrl(task);
+ 
+		if(DEBUG)
+			console.log(
+				"download",
+				task,
+				dat
+			);
+ 
+		this.main.off.post({
+			type: Msg.PROCESS,
+			id: task.id,
+			dat: dat,
+			meta: task.meta,
+			cover: task.cover,
+			rules: task.rules,
+			opts: this.main.store.data
+		});
+	
+	}
+ 
+	async handleStreamComplete(msg) {
+ 
+		const task = this.tasks.find(t =>
+			t.id === msg.id);
+ 
+		if(!task)
+			return;
+ 
+		if(msg.ok) {
+ 
+			//console.log("save", task.file);
+ 
+			if(task.rules.art && this.main.store.artwork && msg.cvr) {
+ 
+				if(DEBUG)
+					console.log("artwork jpg");
+ 
+				const pth = task.file;
+ 
+				const nnm = pth.slice(
+					0,
+					pth.lastIndexOf("/")
+				) + "/cover." + task.cover.type.split("/")[1].replace(
+					"jpeg",
+					"jpg"
+				);
+ 
+				await Util.save(
+					msg.cvr,
+					nnm
+				)
+				.then(dlId => {
+ 
+					if(DEBUG)
+						console.log("artwork saved");
+ 
+				})
+				.catch(err => {
+			
+					this.main.handleError("artwork error : " + err);
+ 
+				});
+				
+			}
+ 
+			await Util.save(
+				msg.url,
+				task.file
+			)
+			.then(downloadId => {
+ 
+				this.blobs.set(
+					downloadId,
+					task.id
+				);
+ 
+				task.sts = Stat.DONE;
+
+				this.main.icon.clearProg(task.id);
+ 
+				this.main.syncQueue(task);
+ 
+			})
+			.catch(err => {
+ 
+				task.sts = Stat.FAIL;
+				task.error = task.file + "\n" + err;
+				this.main.icon.clearProg(task.id);
+				this.main.handleError(task.error);
+ 
+			});
+		
+		}
+		else {
+ 
+			// useless ?
+			task.sts = Stat.FAIL;
+			task.error = msg.error;
+			this.main.icon.clearProg(task.id);
+			this.main.handleError(task.error);
+
+			// update popup queue item status
+			this.main.send(
+				Msg.PROGRESS,
+				{
+					id: task.id,
+					sts: Stat.FAIL,
+					progress: 0
+				}
+			);
+		
+		}
+ 
+		await Util.wait(this.main.store.delays);
+				
+		this.process();
+	
+	}
+ 
 }
 
 class Icn {
@@ -814,7 +1427,7 @@ class Icn {
 	constructor() {
 
 		this.textColor = "#FFFFFF";
-		this.backColor = "#6B7280";
+		this.backColor = "#555555";
 
 		this.letter = Util.manifest.name.slice(
 			0,
@@ -822,39 +1435,39 @@ class Icn {
 		)
 		.toUpperCase();
 
-		this.size = 64;
-
-		this.fade = "AE";
+		this.siz = 64;
 
 		this.timed = null;
 
-		this.progressPercent = null;
-		this.progressHeight = 5;
+		this.progresses = new Map();
+		this.progressHeight = 6;
 		this.progressColor = "#62B9FF";
 
-		this.rect = [0, 0, this.size, this.size];
+		this.rec = [0, 0, this.siz, this.siz];
 
 		this.icon = new OffscreenCanvas(
-			this.size,
-			this.size
+			this.siz,
+			this.siz
 		);
 
-		this.ctx = this.icon.getContext(
+		this.ctx = /** @type {!OffscreenCanvasRenderingContext2D} */(this.icon.getContext(
 			"2d",
 			{
-				alpha: true,
+				alpha: false,
 				willReadFrequently: true
 			}
-		);
+		));
 
-		this.ctx.font = Math.round(this.size * 4 / 5) + "px Segoe UI";
+		this.ctx.font = Math.round(this.siz * 4 / 5) + "px Segoe UI";
 		this.ctx.textAlign = "center";
 		this.ctx.textBaseline = "alphabetic";
 
-		const metrics = this.ctx.measureText(this.letter);
+		const metrics = /** @type {!TextMetrics} */(this.ctx.measureText(this.letter));
 
-		this.x = this.size / 2;
-		this.y = this.size / 2 + (metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2;
+		this.x = this.siz / 2;
+		this.y = this.siz / 2 + ((metrics.actualBoundingBoxAscent || 0) - (metrics.actualBoundingBoxDescent || 0)) / 2;
+
+		this.queued = false;
 
 		this.reset();
 	
@@ -863,35 +1476,30 @@ class Icn {
 	reset() {
 
 		this.textColor = "#FFFFFF";
-		this.backColor = "#6B7280";
-		this.progressPercent = null;
-
-		this.render();
+		this.backColor = "#555555";
+		this.draw();
 	
 	}
 
 	text(color) {
 
 		this.textColor = color;
-
-		this.render();
+		this.draw();
 	
 	}
 
 	back(color) {
 
-		this.backColor = color + this.fade;
-
-		this.render();
+		clearTimeout(this.timed);
+		this.backColor = color;
+		this.draw();
 	
 	}
 
 	temp(color) {
 
 		clearTimeout(this.timed);
-
 		this.back(color);
-
 		this.timed = setTimeout(
 			() =>
 				this.reset(),
@@ -900,46 +1508,72 @@ class Icn {
 	
 	}
 
-	progress(percent) {
+	prog(id, pc) {
 
-		this.progressPercent = Math.max(
-			0,
-			Math.min(
-				100,
-				percent
-			)
+		if(pc === null)
+			this.progresses.delete(id);
+		else
+			this.progresses.set(
+				id,
+				Util.clamp(pc)
+			);
+
+		this.draw();
+	
+	}
+
+	clearProg(id) {
+
+		this.progresses.delete(id);
+		this.draw();
+	
+	}
+
+	draw() {
+
+		if(this.queued)
+			return;
+
+		this.queued = true;
+		
+		setTimeout(
+			() => {
+
+				this.queued = false;
+				this.render();
+		
+			},
+			66
 		);
-
-		this.render();
 	
 	}
 
 	render() {
 
-		this.ctx.clearRect(...this.rect);
+		this.ctx.clearRect(...this.rec);
 
 		this.ctx.fillStyle = this.backColor;
+		this.ctx.fillRect(...this.rec);
 
-		this.ctx.fillRect(...this.rect);
-
-		if(this.progressPercent !== null) {
-
-			const progressWidth = (this.progressPercent / 100) * this.size;
-			const progressY = this.size - this.progressHeight;
+		if(this.progresses.size > 0) {
 
 			this.ctx.fillStyle = this.progressColor;
 
-			this.ctx.fillRect(
-				0,
-				progressY,
-				progressWidth,
-				this.progressHeight
-			);
+			Array.from(this.progresses.values())
+			.forEach((pct, idx) => {
+
+				this.ctx.fillRect(
+					0,
+					this.siz - (idx + 1) * this.progressHeight,
+					(pct / 100) * this.siz,
+					this.progressHeight
+				);
+			
+			});
 		
 		}
 
 		this.ctx.fillStyle = this.textColor;
-
 		this.ctx.fillText(
 			this.letter,
 			this.x,
@@ -947,238 +1581,8 @@ class Icn {
 		);
 
 		action.setIcon({
-			imageData: this.ctx.getImageData(...this.rect)
+			imageData: this.ctx.getImageData(...this.rec)
 		});
-	
-	}
-
-	badge(text, back = "#3b89f6") {
-
-		action.setBadgeText({
-			text
-		});
-
-		action.setBadgeBackgroundColor({
-			color: back
-		});
-	
-	}
-
-}
-
-class Queue {
-
-	/**
-	 * @param {Backstage} main
-	 */
-	constructor(main) {
-
-		this.main = main;
-		this.proc = "offscreen.html";
-		this.tasks = [];
-		this.current = null;
-		this.processing = false;
-		this.blobs = new Map();
-	
-	}
-
-	add(task) {
-
-		this.tasks.push(task);
-		this.main.sendQueue();
-		this.process();
-	
-	}
-
-	async process() {
-
-		if(this.processing || !this.tasks.length)
-			return;
-
-		this.processing = true;
-
-		await this.main.off.ensure(this.proc);
-
-		this.processNext();
-	
-	}
-
-	async processNext() {
-
-		const done = this.tasks.findIndex(task =>
-			task.status === "ok");
-
-		if(done !== -1) {
-
-			this.tasks.splice(
-				done,
-				1
-			);
-		
-		}
-
-		const pending = this.tasks.filter(task =>
-			task.status !== "ok" && task.status !== "no");
-
-		if(!pending.length) {
-
-			await this.main.off.close();
-
-			this.current = null;
-			this.processing = false;
-			this.main.sendQueue();
-
-			return;
-		
-		}
-
-		this.current = pending[0];
-		this.current.status = "load";
-
-		this.main.sendQueue();
-
-		this.downloadTask(this.current);
-	
-	}
-
-	async downloadTask(task) {
-		
-		//console.log("task", task);
-
-		if(!task.album) {
-
-			try {
-
-				task.album = await this.main.getRelease(task.track.album.id);
-			
-			}
-			catch(err) {
-
-				console.error(err);
-
-				task.status = "no";
-				task.error = err;
-
-				this.processNext();
-
-				return;
-				
-			}
-		
-		}
-
-		task.file = this.main.getFilePath(
-			task.track,
-			task.album,
-			task.rules
-		);
-
-		task.meta = this.main.getMetaData(
-			task.track,
-			task.album
-		);
-
-		if(!task.cover)
-			task.cover = await this.main.getCover(this.main.getCoverUrl(task.album));
-
-		this.startDownload(
-			await this.main.getTrackUrl(
-				task.track,
-				task.quality
-			),
-			task
-		);
-	
-	}
-
-	startDownload(dat, task) {
-
-		if(DEBUG)
-			console.log(
-				"download",
-				dat,
-				task
-			);
-
-		this.main.off.post({
-			type: "process",
-			id: task.id,
-			dat: dat,
-			metadata: task.meta,
-			cover: task.cover
-		});
-
-	}
-
-	async handleStreamComplete(msg) {
-
-		if(!this.current || this.current.id !== msg.id)
-			return;
-
-		if(msg.ok) {
-
-			//console.log("save", this.current.file);
-
-			await browse.downloads.download({
-				url: msg.url,
-				filename: this.current.file,
-				conflictAction: "overwrite"
-			})
-			.then(downloadId => {
-
-				this.blobs.set(
-					downloadId,
-					this.current.id
-				);
-
-				/*if(this.main.opt.downloadCovers) {
-
-					const downloadCoverId = browse.downloads.download({
-						url: msg.cvr,
-						filename: [...this.current.file.split("/")
-						.slice(
-							0,
-							-1
-						), "cover"].join("/") + "." + this.current.cover.type.split("/")[1].replace(
-							"jpeg",
-							"jpg"
-						),
-						conflictAction: "overwrite"
-					});
-				
-				}*/
-
-				this.current.status = "ok";
-
-			})
-			.catch(err => {
-
-				/*if(browse.runtime.lastError) {
-
-					this.current.status = "no";
-					this.current.error = browse.runtime.lastError.message;
-				
-				}*/
-
-				this.current.status = "no";
-				this.current.error = this.current.file + "\n" + err;
-				console.error(this.current.error);
-
-			});
-		
-		}
-		else {
-
-			this.current.status = "no";
-			this.current.error = msg.error;
-		
-		}
-
-		this.main.sendQueue();
-
-		await wait();
-				
-		this.processNext();
 	
 	}
 

@@ -1,33 +1,45 @@
-import {browse, DEBUG} from "./vars.js";
-import {Core} from "./core.js";
+import {browse, DEBUG, Msg} from "./vars.js";
+import {AudioProcessor} from "../proc.audio.js";
 
-class OffscreenBase extends Core {
+class ExtOff {
 
 	constructor() {
 
-		super();
+		if(DEBUG)
+			console.log("off we go");
+
+		browse.runtime.onMessage.addListener(this.handleMessage.bind(this));
 
 		this.blobs = new Map();
 		this.covrs = new Map();
-	
+
 	}
 
 	handleMessage(msg) {
 
 		switch(msg.type) {
 
-			case "process":
+			case Msg.PROCESS:
 				this.procs(msg);
 				break;
 
-			case "clear":
+			case Msg.CLEAR:
 				this.clear(msg);
 				break;
 
 		}
 
 	}
+
+	send(typ, dat = {}) {
+
+		browse.runtime.sendMessage({
+			type: typ,
+			...dat
+		});
 	
+	}
+
 	procs(msg) {
 
 		if(DEBUG)
@@ -36,11 +48,15 @@ class OffscreenBase extends Core {
 				msg
 			);
 
-		this.process(
+		const proc = new AudioProcessor();
+
+		proc.process(
 			msg.dat,
-			msg.metadata,
+			msg.meta,
 			msg.id,
-			msg.cover
+			msg.cover,
+			msg.rules,
+			msg.opts
 		)
 		.then(url => {
 
@@ -49,73 +65,78 @@ class OffscreenBase extends Core {
 				url
 			);
 
-			const cvr = new Blob(
-				[new Uint8Array(msg.cover.data).buffer],
+			let cvr = null;
+
+			if(msg.rules.art) {
+
+				cvr = URL.createObjectURL(new Blob(
+					[new Uint8Array(msg.cover.data)],
+					{
+						type: msg.cover.type
+					}
+				));
+
+				this.covrs.set(
+					msg.id,
+					cvr
+				);
+			
+			}
+
+			this.send(
+				Msg.COMPLETE,
 				{
-					type: msg.cover.type
+					ok: true,
+					id: msg.id,
+					url,
+					cvr
 				}
 			);
 
-			this.covrs.set(
-				msg.id,
-				cvr
-						
-			);
-
-			browse.runtime.sendMessage({
-				type: "complete",
-				ok: true,
-				id: msg.id,
-				url: url,
-				cvr: URL.createObjectURL(cvr)
-			});
-		
 		})
 		.catch(err => {
 
-			console.error(
-				"process error",
-				err
+			//console.error("process error",err);
+
+			this.send(
+				Msg.COMPLETE,
+				{
+					ok: false,
+					id: msg.id,
+					error: "offscreen error " + err
+				}
 			);
 
-			// sendMessage "error"
-		
-			browse.runtime.sendMessage({
-				type: "complete",
-				ok: false,
-				id: msg.id,
-				error: err.message
-			});
-		
 		});
 
 	}
 
-	async process(dat, metadata, messageId, cover) {
-
-		// from child classes
-		return Promise.resolve("");
-	
-	}
-
 	clear(msg) {
 
-		// single blobs Map for tracks & covers ?
-		
 		const taskId = msg.id;
 
 		if(this.blobs.has(taskId)) {
 
-			URL.revokeObjectURL(this.blobs.get(taskId));
+			if(DEBUG)
+				console.log(
+					"revoke audio",
+					taskId
+				);
 
+			URL.revokeObjectURL(this.blobs.get(taskId));
 			this.blobs.delete(taskId);
 
 		}
 
 		if(this.covrs.has(taskId)) {
 
-			URL.revokeObjectURL(this.covrs.get(taskId));
+			if(DEBUG)
+				console.log(
+					"revoke cover",
+					taskId
+				);
 
+			URL.revokeObjectURL(this.covrs.get(taskId));
 			this.covrs.delete(taskId);
 
 		}
@@ -125,5 +146,5 @@ class OffscreenBase extends Core {
 }
 
 export {
-	OffscreenBase
+	ExtOff
 };

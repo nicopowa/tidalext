@@ -1,32 +1,31 @@
 {
 	"manifest_version": 3,
 	"name": "TidalExt",
-	"version": "1.7",
+	"version": "1.8",
 	"description": "〜ヽ(⌐￭_￭)ノ♪♬",
 	"author": "Nico Pr",
 	"homepage_url": "https://github.com/nicopowa/tidalext",
 	"action": {
-		"default_popup": "popup.html",
+		"default_popup": "common/pop.html",
 		"default_title": "TidalExt"
 	},
 	"permissions": ["storage", "downloads", "webRequest", "tabHide"],
 	"host_permissions": ["https://*.tidal.com/*"],
 	"background": {
-		"scripts": ["tidalext.js"],
+		"scripts": ["common/entry.js"],
 		"type": "module"
 	},
 	"content_scripts": [
 		{
 			"matches": ["https://tidal.com/*"],
-			"js": ["content.js"],
-			"run_at": "document_start",
-			"all_frames": false
+			"js": ["common/cnt.js"],
+			"run_at": "document_start"
 		}
 	],
 	"web_accessible_resources": [
 		{
 			"matches": ["https://tidal.com/*"],
-			"resources": ["inject.js"]
+			"resources": ["common/cnt.js"]
 		}
 	],
 	"commands": {

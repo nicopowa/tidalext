@@ -1,84 +1,94 @@
-import {DEBUG, Type} from "./common/vars.js";
+import {DEBUG} from "./common/vars.js";
 import {Backstage} from "./common/back.js";
+import {Util} from "./common/util.js";
+import {Help} from "./popped.js";
+//import {AtmosSession} from "./atmos.session.js";
 
-class TidalBackground extends Backstage {
+class ExtBck extends Backstage {
 
 	constructor() {
 
 		super();
 
-		this.opt = {
-			...this.opt,
-			// 80 160 320 640 1280
-			coverSize: 640
-		};
+		this.apiBase = this.urlBase.slice(
+			0,
+			-1
+		);
 
-		this.urlBase = "https://tidal.com/";
-		this.quality = "LOSSLESS";
+		this.dat = {};
 
-		this.dat = {
-			...this.dat,
-			clientId: "zU4XHVVkc2tDPo4t",
-			accessToken: "",
-			countryCode: "US"
-		};
+		//this.atmos = new AtmosSession();
+		this.atmos = null;
 
 		this.heads("https://login.tidal.com/oauth2/*");
-
-		this.watch({
-			"/v1/country": this.handleCountry,
-			"/pages/album": this.handleAlbum,
-			"/v2/artist/": this.handleArtist,
-			"/v1/playlists/": this.handlePlaylist
-		});
 	
 	}
 
-	heading(evt) {
+	/**
+	 * @override
+	 */
+	preqsup(evt) {
 
-		const authHeader = evt.requestHeaders.find(reqHeader =>
-			reqHeader.name === "authorization");
+		super.preqsup(evt);
 
-		if(authHeader) {
+	}
 
-			if(DEBUG)
-				console.log("auth data");
+	/**
+	 * @override
+	 */
+	headsup(evt) {
 
-			if(authHeader.value !== this.dat.accessToken) {
+		const userToken = Util.headerValue(
+			evt.requestHeaders,
+			"authorization"
+		);
 
-				this.dat.accessToken = authHeader.value;
-				this.dat.auth = true;
+		if(userToken) {
+
+			if(userToken !== this.store.token) {
+
+				if(DEBUG)
+					console.log("auth data");
+
+				this.store.token = userToken;
+
 				this.ready();
 			
 			}
 
 		}
 
-		return {
-			requestHeaders: evt.requestHeaders
-		};
-
 	}
 
-	async request(endpoint, params = {}) {
+	async request(endpoint, params = {}, headsup = {}, tokened = false) {
+
+		params = {
+			...params,
+			"countryCode": this.store.country,
+			"locale": navigator.language,
+			"deviceType": "BROWSER" // "BROWSER", "TV"
+		};
 
 		const query = Object.keys(params).length ? "?" + new URLSearchParams(params) : "";
 		
 		const res = await fetch(
-			`${this.urlBase}v1/${endpoint}${query}`,
+			`${this.apiBase}${endpoint}${query}`,
 			{
 				headers: {
 					"Content-Type": "application/json",
-					"X-Tidal-Token": this.dat.clientId,
-					...(this.dat.auth ? {
-						"Authorization": this.dat.accessToken
-					} : {})
+					...(tokened ? {
+						"X-Tidal-Token": "zU4XHVVkc2tDPo4t"
+					} : {}),
+					"Authorization": this.store.token,
+					...headsup
 				}
 			}
 		);
 
 		if(!res.ok)
-			throw new Error(`http ${res.status}: ${res.statusText}`);
+			throw `http ${res.status}: ${await res.text()
+			.catch(() =>
+				res.statusText)}`;
 		
 		const dat = await res.json();
 
@@ -86,265 +96,67 @@ class TidalBackground extends Backstage {
 	
 	}
 
-	handleCountry(tab, dat) {
-
-		//if(DEBUG) console.log("COUNTRY", dat);
-
-		this.dat.countryCode = dat.countryCode || "US";
-
-	}
-
-	handleAlbum(tab, dat) {
-
-		dat = this.parseAlbum(dat);
-
-		this.medias.set(
-			tab.id,
-			dat
-		);
-
-		if(DEBUG)
-			console.log(
-				tab.id,
-				dat.extype,
-				dat
-			);
-
-		this.mediaHint();
-
-		this.syncPopup();
-
-	}
-
-	handleReleases(tab, dat) {
-
-		dat = {
-			...dat,
-			extype: "releases"
-		};
-
-		this.medias.set(
-			tab.id,
-			dat
-		);
-
-		if(DEBUG)
-			console.log(
-				tab.id,
-				dat.extype,
-				dat
-			);
-
-		this.syncPopup();
-	
-	}
-
-	handleArtist(tab, dat) {
-
-		dat = {
-			...dat,
-			extype: Type.ARTIST
-		};
-
-		const cur = this.mediaTab(tab);
-
-		if(dat.item) { // && dat.header ?
-
-			if(dat.items) {
-
-				const releasesTypes = ["ARTIST_ALBUMS", "ARTIST_TOP_SINGLES"];
-
-				dat.releases = dat.items.filter(releaseSection =>
-					releasesTypes.includes(releaseSection.moduleId || releaseSection.type))
-				.flatMap(releaseSection =>
-					releaseSection.data || releaseSection.items.map(sectionItem =>
-						sectionItem.data));
-			
-			}
-
-			this.medias.set(
-				tab.id,
-				dat
-			);
-		
-		}
-		else if(dat.itemLayout) {
-			
-			const releasesAdds = dat.items.map(rel =>
-				rel.data);
-
-			if(cur.extype === Type.ARTIST) {
-
-				dat = cur;
-
-				dat.releases.push(...releasesAdds.filter(releasing =>
-					!dat.releases.some(release =>
-						release.id === releasing.id)));
-			
-			}
-			else {
-
-				if(DEBUG)
-					console.log("artist info");
-
-				const artists = releasesAdds.flatMap(release =>
-					release.artists.map(artist =>
-						({
-							name: artist.name, id: artist.id
-						})));
-				const whoDat = artists.sort((a, b) =>
-					artists.filter(v =>
-						v.id === b.id).length - artists.filter(v =>
-						v.id === a.id).length)[0];
-
-				//console.log(whoDat);
-				dat.item = {
-					data: whoDat
-				};
-				dat.releases = releasesAdds;
-			
-			}
-
-		}
-
-		delete dat.items;
-
-		if(DEBUG)
-			console.log(
-				tab.id,
-				dat.extype,
-				dat
-			);
-
-		this.mediaHint();
-
-		this.syncPopup();
-
-	}
-
-	handleLabel(tab, dat) {
-		// c'mon
-	}
-
-	handlePlaylist(tab, dat) {
-
-		const cur = this.mediaTab(tab);
-
-		if(dat.uuid) {
-
-			dat = {
-				extype: Type.LIST,
-				items: [],
-				tracks: [],
-				...dat
-			};
-		
-		}
-		else if(cur.extype === Type.LIST) {
-
-			dat = {
-				tracks: [],
-				...cur,
-				items: dat.items
-			};
-		
-		}
-
-		console.log(dat);
-
-		const newTracks = dat.items.map(item =>
-			item.item)
-		.filter(item =>
-			item.streamReady);
-
-		for(const newTrack of newTracks)
-			if(!dat.tracks.find(hasTrack =>
-				hasTrack.id === newTrack.id))
-				dat.tracks.push(newTrack);
-
-		delete dat.items;
-
-		this.medias.set(
-			tab.id,
-			dat
-		);
-
-		if(DEBUG)
-			console.log(
-				tab.id,
-				dat.extype,
-				dat
-			);
-
-		this.mediaHint();
-
-		this.syncPopup();
-
-	}
-
-	parseAlbum(dat) {
-
-		const modules = dat.rows.map(row =>
-			row.modules?.[0]);
-
-		const albumInfos = modules.find(module =>
-			module.type === "ALBUM_HEADER")?.album;
-
-		const albumTracks = modules.find(module =>
-			module.type === "ALBUM_ITEMS")?.pagedList?.items.filter(item =>
-			item.type === "track")
-		.map(track =>
-			track.item);
-
-		return {
-			...albumInfos,
-			tracks: albumTracks,
-			extype: Type.ALBUM
-		};
-
-	}
-
+	/**
+	 * @override
+	 */
 	async getRelease(releaseId) {
 
-		if(DEBUG)
-			console.log(
-				"get release data",
-				releaseId
-			);
-
-		const releaseData = this.parseAlbum(await this.request(
-			"pages/album",
+		const releaseData = Help.parseAlbum(await this.request(
+			"/v1/pages/album",
 			{
-				albumId: releaseId,
-				countryCode: this.dat.countryCode,
-				locale: navigator.language,
-				deviceType: "BROWSER"
+				"albumId": releaseId
 			}
 		));
 
-		//console.log(releaseData);
+		const releaseInfo = await this.request(`/v1/albums/${releaseId}`);
 
-		return releaseData;
+		const releaseFull = {
+			...releaseData,
+			...releaseInfo
+		};
+
+		return releaseFull;
 
 	}
 	
+	/**
+	 * @override
+	 * @return {Array<TidalTrack>}
+	 */
 	trackList(media) {
 
-		return (media?.tracks || [])
+		return (media?.lst || [])
 		.filter(track =>
 			track.allowStreaming);
 	
 	}
 
-	playlistInfos(list) {
+	/**
+	 * @override
+	 */
+	trackRules(track) {
 
 		return {
-			listName: list.title,
-			tracks: list.numberOfTracks
+			atmos: this.store.atmos && track.mediaMetadata?.tags?.includes("DOLBY_ATMOS")
+		};
+	
+	}
+
+	/**
+	 * @override
+	 */
+	listRules(media) {
+
+		return {
+			title: media.title,
+			count: media.count
 		};
 		
 	}
-
+	
+	/**
+	 * @override
+	 */
 	getTrackInfos(track) {
 
 		return {
@@ -355,34 +167,31 @@ class TidalBackground extends Backstage {
 	
 	}
 
-	async getTrackUrl(track, quality) {
-
-		super.getTrackUrl(
-			track.id,
-			quality
-		);
+	/**
+	 * @override
+	 */
+	async getTrackUrl(task) {
 		
-		// what ?
-		quality = quality.replace(
+		const trid = task.track.id;
+		
+		const qual = task.quality
+		.replace( // o_0 ?
 			"HIRES",
 			"HI_RES"
 		);
 
+		const heads = this.atmos ? task.rules.atmos ? await this.atmos.ensure() : {} : {};
+
 		const trackManifest = await this.request(
-			`tracks/${track.id}/playbackinfopostpaywall`,
+			`/v1/tracks/${trid}/playbackinfopostpaywall`,
 			{
-				playbackmode: "STREAM",
-				assetpresentation: "FULL",
-				audioquality: quality,
-				countryCode: this.dat.countryCode // was "US"
-			}
+				"playbackmode": "STREAM",
+				"assetpresentation": "FULL",
+				"audioquality": qual
+			},
+			heads,
+			true
 		);
-
-		if(!trackManifest.manifest) {
-
-			throw new Error("no manifest");
-		
-		}
 
 		const manifestText = atob(trackManifest.manifest);
 
@@ -394,17 +203,9 @@ class TidalBackground extends Backstage {
 	
 	}
 
-	getCoverUrl(media) {
-		
-		const coverSize = this.opt.coverSize;
-
-		return `https://resources.tidal.com/images/${(media?.album?.cover || media?.cover).replaceAll(
-			"-",
-			"/"
-		)}/${coverSize}x${coverSize}.jpg`;
-
-	}
-
+	/**
+	 * @override
+	 */
 	getFilePath(track, album, rules) {
 
 		const theArtist = track.artists || album.artists;
@@ -430,28 +231,28 @@ class TidalBackground extends Backstage {
 
 		let filePath = `${artistName}/${albumTitle} (${albumYear})/${albumPart ? `CD${albumPart}/` : ""}${trackNum}. ${trackTitle}`;
 		
-		if(rules && rules.list) {
+		if(rules.list) {
 
-			const listName = this.sanitize(rules.listName);
+			const listName = this.sanitize(rules.title);
 
-			const trackIndex = rules.indx.toString()
+			const trackIndex = rules.indx ? rules.indx.toString()
 			.padStart(
-				rules.tracks.toString().length,
+				rules.count.toString().length,
 				"0"
-			);
+			) + ". ": "";
 
-			filePath = `${listName}/${trackIndex}. ${artistName} - ${trackTitle}`;
+			filePath = `${listName}/${trackIndex}${artistName} - ${trackTitle}`;
 
 		}
 
-		// m4what ?
-		const fileExt = ".flac";
-
-		return `Tidal/${filePath}${fileExt}`;
+		return `Tidal/${filePath}.flac`;
 
 	}
 
-	getMetaData(track, album) {
+	/**
+	 * @override
+	 */
+	getMetaData(track, album, brain = {}) {
 
 		const theArtist = track.artists || album.artists;
 
@@ -480,12 +281,14 @@ class TidalBackground extends Backstage {
 			"TRACKNUMBER": String(track.trackNumber || 1),
 			"TOTALTRACKS": String(album?.numberOfTracks || 1),
 		
-			// ISRC (enable Settings > Display > Audio metadata)
+			// enable Settings > Display > Audio metadata
 			...(track.isrc ? {
 				"ISRC": track.isrc
 			} : {}),
 
-			// UPC
+			...(album.upc ? {
+				"UPC": album.upc
+			} : {}),
 
 			...(track.url ? {
 				"URL": track.url
@@ -502,5 +305,5 @@ class TidalBackground extends Backstage {
 }
 
 export {
-	TidalBackground
+	ExtBck
 };
